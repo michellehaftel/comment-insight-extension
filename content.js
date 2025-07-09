@@ -32,19 +32,40 @@ function loadTippyJs(callback) {
   }
 }
 
-// === REPHRASE LOGIC ===
-const rephraseMap = {
-  "stupid": "unwise",
-  "idiot": "person",
-  "hate": "dislike",
-  "worst": "not ideal",
-  "angry": "upset",
-  "asshole": "person"
-};
-function rephraseText(text) {
-  return text.replace(/stupid|idiot|hate|worst|angry|asshole/gi, (match) => {
-    return rephraseMap[match.toLowerCase()] || match;
+// === OPENAI API CONFIG ===
+// OPENAI_API_KEY is now loaded from config.js
+if (typeof OPENAI_API_KEY === 'undefined') {
+  alert('OPENAI_API_KEY is not set. Please create config.js with your API key.');
+}
+const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
+const SYSTEM_PROMPT = "you are a machine that is incharge of de-escelation, so given the text you get from a user - check if there are any offensive words or idea - and suggest as output the full sentence with reprashing the user text.";
+
+// === DEBOUNCE ===
+let debounceTimeout = null;
+let lastText = "";
+
+async function getRephrasedText(userText) {
+  const response = await fetch(OPENAI_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${OPENAI_API_KEY}`
+    },
+    body: JSON.stringify({
+      model: "gpt-3.5-turbo",
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: userText }
+      ],
+      max_tokens: 100
+    })
   });
+  const data = await response.json();
+  if (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) {
+    return data.choices[0].message.content.trim();
+  } else {
+    return userText; // fallback
+  }
 }
 
 // === TOOLTIP UTILITIES ===
@@ -111,18 +132,27 @@ function showCustomTooltip(target, originalText, suggestionText) {
 // === MAIN LOGIC ===
 document.addEventListener("input", (e) => {
   const target = e.target;
-  console.log('[De-Escalator] Input event detected:', target);
   if (!target) return;
   const text = target.value || target.innerText;
-  console.log('[De-Escalator] Input text:', text);
-  if (text && text.length > 10 && isAggressive(text)) {
-    const suggestion = rephraseText(text);
-    console.log('[De-Escalator] Escalation detected! Showing tooltip.', { original: text, suggestion });
-    showCustomTooltip(target, text, suggestion);
-  } else if (currentTooltip) {
-    currentTooltip.remove();
-    currentTooltip = null;
-  }
+  if (debounceTimeout) clearTimeout(debounceTimeout);
+  if (!text || text.length <= 10) return;
+  // Only trigger if text ends with '*'
+  if (!text.trim().endsWith('*')) return;
+  debounceTimeout = setTimeout(async () => {
+    // Only trigger if text changed
+    if (text === lastText) return;
+    lastText = text;
+    // Remove trailing '*' before sending to API
+    const cleanText = text.replace(/\*+$/, '').trim();
+    // Call OpenAI API
+    const suggestion = await getRephrasedText(cleanText);
+    if (suggestion && suggestion !== cleanText) {
+      showCustomTooltip(target, text, suggestion);
+    } else if (currentTooltip) {
+      currentTooltip.remove();
+      currentTooltip = null;
+    }
+  }, 2000);
 });
 
 console.log("\u2705 De-Escalator content.js loaded and listening.");
