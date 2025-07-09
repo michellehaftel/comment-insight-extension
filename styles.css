@@ -1,0 +1,54 @@
+.de-tooltip {
+  font-family: sans-serif;
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+
+.tippy-box[data-theme~='light'] {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  border-radius: 8px;
+  font-size: 15px;
+}
+
+.de-escalator-tooltip {
+  background: #fff;
+  border: 1px solid #d1d5db;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  border-radius: 10px;
+  padding: 18px 20px 14px 20px;
+  max-width: 340px;
+  min-width: 220px;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  font-size: 15px;
+  color: #222;
+  transition: opacity 0.2s;
+  position: fixed;
+  z-index: 99999;
+}
+.de-tooltip-content { display: flex; flex-direction: column; align-items: flex-start; }
+.de-tooltip-title { font-weight: bold; margin-bottom: 8px; }
+.de-tooltip-label { margin-bottom: 4px; color: #555; font-size: 14px; }
+.de-tooltip-suggestion { font-style: italic; margin-bottom: 12px; color: #1976d2; }
+.de-tooltip-actions { display: flex; gap: 10px; }
+.de-tooltip-btn {
+  padding: 5px 16px;
+  border: none;
+  border-radius: 5px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.de-tooltip-btn.de-accept {
+  background: #1976d2;
+  color: #fff;
+}
+.de-tooltip-btn.de-accept:hover {
+  background: #125ea2;
+}
+.de-tooltip-btn.de-dismiss {
+  background: #eee;
+  color: #333;
+}
+.de-tooltip-btn.de-dismiss:hover {
+  background: #ccc;
+}
