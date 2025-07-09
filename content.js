@@ -6,7 +6,7 @@ const triggerThreshold = 0.7; // Dummy threshold for "aggressiveness"
 
 // === UTILITIES ===
 function isAggressive(text) {
-  const aggressiveKeywords = ["stupid", "idiot", "hate", "worst", "angry"];
+  const aggressiveKeywords = ["stupid", "idiot", "hate", "worst", "angry", "asshole"];
   return aggressiveKeywords.some((word) => text.toLowerCase().includes(word));
 }
 
@@ -38,10 +38,11 @@ const rephraseMap = {
   "idiot": "person",
   "hate": "dislike",
   "worst": "not ideal",
-  "angry": "upset"
+  "angry": "upset",
+  "asshole": "person"
 };
 function rephraseText(text) {
-  return text.replace(/stupid|idiot|hate|worst|angry/gi, (match) => {
+  return text.replace(/stupid|idiot|hate|worst|angry|asshole/gi, (match) => {
     return rephraseMap[match.toLowerCase()] || match;
   });
 }
