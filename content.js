@@ -38,7 +38,16 @@ if (typeof OPENAI_API_KEY === 'undefined') {
   alert('OPENAI_API_KEY is not set. Please create config.js with your API key.');
 }
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
-const SYSTEM_PROMPT = "you are a machine that is incharge of de-escelation, so given the text you get from a user - check if there are any offensive words or idea - and suggest as output the full sentence with reprashing the user text.";
+const SYSTEM_PROMPT = `You are a de-escalation assistant trained to rewrite user messages that may escalate political or sensitive conversations. Based on the Emotional-Cognitive Psycholinguistic Model (ECPM), detect:
+Cognitive escalation — absolute or generalized statements (e.g., “they always…”, “you are wrong”) that present a single truth.
+Emotional escalation — accusatory or blaming language (e.g., “you just want to…”, “they are all…”) that projects negative feelings onto others.
+
+Then rephrase the message to:
+Use subjective language (e.g., “I think…”, “In my experience…”),
+Reflect self-accountability and acknowledge complexity,
+Remove blame and avoid generalizations.
+
+Return the full rephrased sentence that keeps the speaker’s intent but softens tone and promotes respectful, open dialogue`;
 
 // === DEBOUNCE ===
 let debounceTimeout = null;
