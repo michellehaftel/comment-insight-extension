@@ -12,43 +12,72 @@
 
 .de-escalator-tooltip {
   background: #fff;
-  border: 1px solid #d1d5db;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
-  border-radius: 10px;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(15, 20, 25, 0.15), 0 1.5px 3px rgba(15, 20, 25, 0.10);
   padding: 18px 20px 14px 20px;
+  min-width: 260px;
   max-width: 340px;
-  min-width: 220px;
   font-family: 'Segoe UI', Arial, sans-serif;
   font-size: 15px;
-  color: #222;
-  transition: opacity 0.2s;
+  color: #0f1419;
   position: fixed;
   z-index: 99999;
-}
-.de-tooltip-content { display: flex; flex-direction: column; align-items: flex-start; }
-.de-tooltip-title { font-weight: bold; margin-bottom: 8px; }
-.de-tooltip-label { margin-bottom: 4px; color: #555; font-size: 14px; }
-.de-tooltip-suggestion { font-style: italic; margin-bottom: 12px; color: #1976d2; }
-.de-tooltip-actions { display: flex; gap: 10px; }
-.de-tooltip-btn {
-  padding: 5px 16px;
+  animation: fadeInTooltip 0.18s;
   border: none;
-  border-radius: 5px;
+}
+
+@keyframes fadeInTooltip {
+  from { opacity: 0; transform: translateY(8px);}
+  to { opacity: 1; transform: translateY(0);}
+}
+
+.de-tooltip-title {
+  font-weight: bold;
+  margin-bottom: 8px;
+  font-size: 16px;
+}
+
+.de-tooltip-label {
+  margin-bottom: 4px;
+  color: #536471;
   font-size: 14px;
+}
+
+.de-tooltip-suggestion {
+  font-style: italic;
+  margin-bottom: 12px;
+  color: #1d9bf0;
+}
+
+.de-tooltip-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.de-tooltip-btn {
+  padding: 6px 18px;
+  border: none;
+  border-radius: 9999px;
+  font-size: 15px;
   cursor: pointer;
   transition: background 0.15s;
+  font-weight: 500;
 }
+
 .de-tooltip-btn.de-accept {
-  background: #1976d2;
+  background: #1d9bf0;
   color: #fff;
 }
+
 .de-tooltip-btn.de-accept:hover {
-  background: #125ea2;
+  background: #1a8cd8;
 }
+
 .de-tooltip-btn.de-dismiss {
-  background: #eee;
-  color: #333;
+  background: #f7f9fa;
+  color: #0f1419;
 }
+
 .de-tooltip-btn.de-dismiss:hover {
-  background: #ccc;
+  background: #e7e7e8;
 }

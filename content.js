@@ -103,14 +103,15 @@ Return ONLY the full rephrased sentence (or the original if not escalatory), wit
 let debounceTimeout = null;
 let lastText = "";
 
-async function fetchRecentNews() {
-  const url = `https://newsapi.org/v2/everything?q=Israel+Supreme+Court+OR+Netanyahu+trial+OR+Gaza+OR+October+7+OR+hostages+OR+Qatar-gate+OR+Lapid+OR+Gantz+OR+Regev+OR+Gotlib+OR+Udda+OR+Golan+OR+Benette&language=en&sortBy=publishedAt&domains=haaretz.com,ynet.co.il,israelhayom.co.il,cnn.com,bbc.co.uk&apiKey=4e2e399f21f74686808ecb302dee2b32`;
+async function fetchRecentNews(query) {
+  // Use the user's query or a default if not provided
+  const searchQuery = query || "פוליטיקה ישראלית OR בית המשפט העליון OR נתניהו OR עזה OR בני גנץ OR יאיר לפיד OR רפורמה משפטית";
+  const url = `https://gnews.io/api/v4/search?q=${encodeURIComponent(searchQuery)}&lang=he&token=7651cce81dbaeb4058d24803c766951f&max=3`;
   try {
     const response = await fetch(url);
     const data = await response.json();
     if (data.articles && data.articles.length > 0) {
-      // Take top 3 headlines
-      return data.articles.slice(0, 3).map(a => `${a.title} (${a.source.name})`).join('\\n');
+      return data.articles.map(a => `${a.title} (${a.source.name})`).join('\n');
     }
     return '';
   } catch (e) {
@@ -150,7 +151,17 @@ function getTwitterContextForInput(target) {
 async function buildApiPayload(userText, target) {
   let messages = [{ role: "system", content: SYSTEM_PROMPT }];
 
-  const newsContext = await fetchRecentNews();
+  let newsContext = '';
+  if (isTwitter()) {
+    const contextInfo = getTwitterContextForInput(target);
+    if (contextInfo.type === 'replyToTweet' && contextInfo.originalTweet) {
+      newsContext = await fetchRecentNews(contextInfo.originalTweet);
+    } else {
+      newsContext = await fetchRecentNews();
+    }
+  } else {
+    newsContext = await fetchRecentNews();
+  }
   if (newsContext) {
     messages.push({ role: "system", content: "Recent news context: " + newsContext });
   }
@@ -158,7 +169,6 @@ async function buildApiPayload(userText, target) {
   if (isTwitter()) {
     const contextInfo = getTwitterContextForInput(target);
     if (contextInfo.type === 'new') {
-      // Only external news
       messages.push({ role: "user", content: userText });
     } else if (contextInfo.type === 'replyToTweet') {
       messages.push({
