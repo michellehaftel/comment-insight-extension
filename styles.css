@@ -81,3 +81,16 @@
 .de-tooltip-btn.de-dismiss:hover {
   background: #e7e7e8;
 }
+
+/* Celebration Tooltip Specific Styles */
+.celebration-tooltip .celebration-title {
+  color: #1d9bf0;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.celebration-tooltip .celebration-body {
+  margin: 0;
+  color: #536471;
+  font-size: 15px;
+}

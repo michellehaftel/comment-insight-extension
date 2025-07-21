@@ -319,13 +319,12 @@ function showCelebrationTooltip(target) {
     currentTooltip = null;
   }
   const tooltip = document.createElement('div');
-  tooltip.className = 'de-escalator-tooltip';
-  // DEBUG: Add a visible background to see if it's blocking the input
-  tooltip.style.background = 'rgba(255, 0, 0, 0.2)';
+  tooltip.className = 'de-escalator-tooltip celebration-tooltip'; // Use base class + new class
+  tooltip.style.background = '#fff'; // Explicitly set background to white to override cache
   tooltip.innerHTML = `
     <div class="de-tooltip-content">
-      <p class="de-tooltip-title" style="color:#1976d2;font-size:18px;">Great job! 🥳</p>
-      <p style="margin:0;color:#333;">You just made the conversation more positive.</p>
+      <p class="de-tooltip-title celebration-title">Great job! 🥳</p>
+      <p class="celebration-body">You just made the conversation more positive.</p>
     </div>
   `;
   tooltip.style.position = 'fixed';
@@ -348,7 +347,6 @@ function showCelebrationTooltip(target) {
   tooltip.style.left = `${left}px`;
   // Auto-dismiss after 2 seconds
   setTimeout(() => {
-    console.log('[De-Escalator] Removing celebration tooltip.'); // DEBUG
     if (tooltip.parentNode) tooltip.remove();
     if (currentTooltip === tooltip) currentTooltip = null;
   }, 2000);
