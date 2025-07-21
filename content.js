@@ -10,8 +10,9 @@ function isAggressive(text) {
   return aggressiveKeywords.some((word) => text.toLowerCase().includes(word));
 }
 
+// === HELPER FUNCTIONS ===
 function isTwitter() {
-  return window.location.hostname.includes('twitter.com');
+  return window.location.hostname.includes('twitter.com') || window.location.hostname.includes('x.com');
 }
 
 function isFacebook() {
@@ -21,17 +22,17 @@ function isFacebook() {
 function extractTwitterContext() {
   if (!isTwitter()) return null;
   let context = '';
-  // Try to find the original tweet (the main post in the thread)
-  const tweet = document.querySelector('[data-testid="tweet"]');
+  // Try to find the original tweet
+  const tweet = document.querySelector('[data-testid="tweetText"]');
   if (tweet) {
     context += `Original tweet: ${tweet.textContent}\n\n`;
   }
-  // Try to find previous tweets (up to 3)
-  const tweetElements = document.querySelectorAll('[data-testid="tweet"]');
-  if (tweetElements.length > 0) {
-    context += 'Previous tweets:\n';
-    for (let i = 0; i < Math.min(tweetElements.length, 3); i++) {
-      context += `- ${tweetElements[i].textContent}\n`;
+  // Try to find previous replies
+  const replyElements = document.querySelectorAll('[data-testid="tweetText"]');
+  if (replyElements.length > 1) {
+    context += 'Previous replies:\n';
+    for (let i = 1; i < Math.min(replyElements.length, 4); i++) {
+      context += `- ${replyElements[i].textContent}\n`;
     }
     context += '\n';
   }
@@ -41,12 +42,12 @@ function extractTwitterContext() {
 function extractFacebookContext() {
   if (!isFacebook()) return null;
   let context = '';
-  // Try to find the original post (the main post in the thread)
+  // Try to find the original post
   const post = document.querySelector('[role="article"] [data-ad-preview="message"]');
   if (post) {
     context += `Original post: ${post.textContent}\n\n`;
   }
-  // Try to find previous comments (up to 3)
+  // Try to find previous comments
   const commentElements = document.querySelectorAll('[aria-label="Comment"] [data-ad-preview="message"]');
   if (commentElements.length > 0) {
     context += 'Previous comments:\n';
@@ -117,23 +118,57 @@ async function fetchRecentNews() {
   }
 }
 
-async function getRephrasedText(userText) {
-  let messages = [
-    { role: "system", content: SYSTEM_PROMPT }
-  ];
+function getOriginalTweetForReply(target) {
+  // Traverse upwards from the reply box to find the nearest tweet text above
+  let current = target;
+  while (current && current !== document.body) {
+    // Look for a tweet text above
+    const tweetText = current.querySelector
+      ? current.querySelector('[data-testid="tweetText"]')
+      : null;
+    if (tweetText && tweetText.textContent && tweetText.textContent.trim().length > 0) {
+      return tweetText.textContent.trim();
+    }
+    current = current.parentElement;
+  }
+  // Fallback: get the first tweetText on the page
+  const fallback = document.querySelector('[data-testid="tweetText"]');
+  return fallback ? fallback.textContent.trim() : null;
+}
 
-  // Fetch news context
+function getTwitterContextForInput(target) {
+  // If this is a new tweet (not a reply box), only external news
+  const isReply = !!target.closest('[role="dialog"]');
+  if (!isReply) {
+    return { type: 'new', originalTweet: null, repliedComment: null };
+  }
+  // For a reply, get the tweet being replied to
+  const originalTweet = getOriginalTweetForReply(target);
+  return { type: 'replyToTweet', originalTweet, repliedComment: null };
+}
+
+async function buildApiPayload(userText, target) {
+  let messages = [{ role: "system", content: SYSTEM_PROMPT }];
+
   const newsContext = await fetchRecentNews();
   if (newsContext) {
     messages.push({ role: "system", content: "Recent news context: " + newsContext });
   }
 
   if (isTwitter()) {
-    const context = extractTwitterContext();
-    if (context) {
+    const contextInfo = getTwitterContextForInput(target);
+    if (contextInfo.type === 'new') {
+      // Only external news
+      messages.push({ role: "user", content: userText });
+    } else if (contextInfo.type === 'replyToTweet') {
       messages.push({
-        role: "user", 
-        content: `Thread context:\n${context}\nUser comment: ${userText}`
+        role: "user",
+        content: `Original tweet: ${contextInfo.originalTweet}\nUser comment: ${userText}`
+      });
+    } else if (contextInfo.type === 'replyToComment') {
+      messages.push({
+        role: "user",
+        content: `Original tweet: ${contextInfo.originalTweet}\nReplied comment: ${contextInfo.repliedComment}\nUser comment: ${userText}`
       });
     } else {
       messages.push({ role: "user", content: userText });
@@ -141,27 +176,31 @@ async function getRephrasedText(userText) {
   } else if (isFacebook()) {
     const context = extractFacebookContext();
     if (context) {
-      messages.push({
-        role: "user", 
-        content: `Thread context:\n${context}\nUser comment: ${userText}`
-      });
+      messages.push({ role: "user", content: `Thread context:\n${context}\nUser comment: ${userText}` });
     } else {
       messages.push({ role: "user", content: userText });
     }
   } else {
     messages.push({ role: "user", content: userText });
   }
+
+  return {
+    model: "gpt-3.5-turbo",
+    messages: messages,
+    max_tokens: 150
+  };
+}
+
+async function getRephrasedText(userText, target) {
+  const payload = await buildApiPayload(userText, target);
+
   const response = await fetch(OPENAI_API_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${OPENAI_API_KEY}`
     },
-    body: JSON.stringify({
-      model: "gpt-3.5-turbo",
-      messages: messages,
-      max_tokens: 150
-    })
+    body: JSON.stringify(payload)
   });
   const data = await response.json();
   if (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) {
@@ -218,9 +257,20 @@ function showCustomTooltip(target, originalText, suggestionText) {
       if (target.tagName === "TEXTAREA" || target.tagName === "INPUT") {
         target.value = suggestionText;
         target.dispatchEvent(new Event('input', { bubbles: true }));
+        target.focus();
+        // Move cursor to end
+        target.setSelectionRange(target.value.length, target.value.length);
       } else if (target.isContentEditable) {
         target.innerText = suggestionText;
         target.dispatchEvent(new Event('input', { bubbles: true }));
+        // Focus and move cursor to end
+        const range = document.createRange();
+        range.selectNodeContents(target);
+        range.collapse(false);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        target.focus();
       }
     }
 
@@ -260,6 +310,8 @@ function showCelebrationTooltip(target) {
   }
   const tooltip = document.createElement('div');
   tooltip.className = 'de-escalator-tooltip';
+  // DEBUG: Add a visible background to see if it's blocking the input
+  tooltip.style.background = 'rgba(255, 0, 0, 0.2)';
   tooltip.innerHTML = `
     <div class="de-tooltip-content">
       <p class="de-tooltip-title" style="color:#1976d2;font-size:18px;">Great job! 🥳</p>
@@ -286,6 +338,7 @@ function showCelebrationTooltip(target) {
   tooltip.style.left = `${left}px`;
   // Auto-dismiss after 2 seconds
   setTimeout(() => {
+    console.log('[De-Escalator] Removing celebration tooltip.'); // DEBUG
     if (tooltip.parentNode) tooltip.remove();
     if (currentTooltip === tooltip) currentTooltip = null;
   }, 2000);
@@ -309,27 +362,42 @@ document.addEventListener("input", (e) => {
   const text = target.value || target.innerText;
   if (debounceTimeout) clearTimeout(debounceTimeout);
   if (!text || text.length <= 10) return;
-  // Only trigger if text ends with '*'
-  if (!text.trim().endsWith('*')) return;
-  debounceTimeout = setTimeout(async () => {
-    // Only trigger if text changed
-    if (text === lastText) return;
-    lastText = text;
-    // Remove trailing '*' before sending to API
-    const cleanText = text.replace(/\*+$/, '').trim();
-    // Call OpenAI API with all context (user, thread, news)
-    const suggestion = await getRephrasedText(cleanText);
-    // Only show tooltip if the AI's suggestion is different (i.e., escalation detected)
-    if (
-      suggestion &&
-      suggestion.trim() !== cleanText.trim()
-    ) {
-      showCustomTooltip(target, text, suggestion);
-    } else if (currentTooltip) {
-      currentTooltip.remove();
-      currentTooltip = null;
-    }
-  }, 1000);
+
+  const trimmedText = text.trim();
+
+  // --- DEBUG MODE ---
+  if (trimmedText.endsWith('#')) {
+    debounceTimeout = setTimeout(async () => {
+      if (text === lastText) return;
+      lastText = text;
+      const cleanText = trimmedText.replace(/#+$/, '').trim();
+
+      console.log('[De-Escalator] --- DEBUG MODE: Building API Request ---');
+      const apiRequestPayload = await buildApiPayload(cleanText, target);
+
+      console.log('--- OpenAI API Request Payload (not sent) ---');
+      console.log(JSON.stringify(apiRequestPayload, null, 2));
+      console.log('---------------------------------------------');
+
+    }, 1000);
+    return;
+  }
+
+  // --- NORMAL MODE ---
+  if (trimmedText.endsWith('*')) {
+    debounceTimeout = setTimeout(async () => {
+      if (text === lastText) return;
+      lastText = text;
+      const cleanText = trimmedText.replace(/\*+$/, '').trim();
+      const suggestion = await getRephrasedText(cleanText, target);
+      if (suggestion && suggestion.trim() !== cleanText.trim()) {
+        showCustomTooltip(target, text, suggestion);
+      } else if (currentTooltip) {
+        currentTooltip.remove();
+        currentTooltip = null;
+      }
+    }, 1000);
+  }
 });
 
 console.log("\u2705 De-Escalator content.js loaded and listening.");
