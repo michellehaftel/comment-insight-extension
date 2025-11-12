@@ -1,96 +1,129 @@
-.de-tooltip {
-  font-family: sans-serif;
-  border-radius: 8px;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-}
-
-.tippy-box[data-theme~='light'] {
-  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
-  border-radius: 8px;
-  font-size: 15px;
-}
-
-.de-escalator-tooltip {
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 4px 24px rgba(15, 20, 25, 0.15), 0 1.5px 3px rgba(15, 20, 25, 0.10);
-  padding: 18px 20px 14px 20px;
-  min-width: 260px;
-  max-width: 340px;
-  font-family: 'Segoe UI', Arial, sans-serif;
-  font-size: 15px;
-  color: #0f1419;
+/* Tooltip container */
+.tooltip-container {
   position: fixed;
-  z-index: 99999;
-  animation: fadeInTooltip 0.18s;
-  border: none;
+  bottom: 20px;
+  right: 20px;
+  z-index: 9999;
+  max-width: 400px;
+  animation: slideIn 0.3s ease-out;
 }
 
-@keyframes fadeInTooltip {
-  from { opacity: 0; transform: translateY(8px);}
-  to { opacity: 1; transform: translateY(0);}
+/* Tooltip content */
+.tooltip-content {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  border: 1px solid #e0e0e0;
 }
 
-.de-tooltip-title {
-  font-weight: bold;
-  margin-bottom: 8px;
-  font-size: 16px;
-}
-
-.de-tooltip-label {
-  margin-bottom: 4px;
-  color: #536471;
+/* Tooltip message */
+.tooltip-message {
+  color: #000;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 14px;
-}
-
-.de-tooltip-suggestion {
-  font-style: italic;
-  margin-bottom: 12px;
-  color: #1d9bf0;
-}
-
-.de-tooltip-actions {
-  display: flex;
-  gap: 10px;
-}
-
-.de-tooltip-btn {
-  padding: 6px 18px;
-  border: none;
-  border-radius: 9999px;
-  font-size: 15px;
-  cursor: pointer;
-  transition: background 0.15s;
+  line-height: 1.5;
+  margin: 0 0 16px 0;
   font-weight: 500;
 }
 
-.de-tooltip-btn.de-accept {
-  background: #1d9bf0;
-  color: #fff;
+/* Tooltip suggestion section */
+.tooltip-suggestion {
+  background: #f5f5f5;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 0 0 16px 0;
+  border-left: 3px solid #B880FF;
 }
 
-.de-tooltip-btn.de-accept:hover {
-  background: #1a8cd8;
+.tooltip-suggestion-label {
+  color: #666;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.de-tooltip-btn.de-dismiss {
-  background: #f7f9fa;
-  color: #0f1419;
-}
-
-.de-tooltip-btn.de-dismiss:hover {
-  background: #e7e7e8;
-}
-
-/* Celebration Tooltip Specific Styles */
-.celebration-tooltip .celebration-title {
-  color: #1d9bf0;
-  font-size: 18px;
-  font-weight: bold;
-}
-
-.celebration-tooltip .celebration-body {
+.tooltip-suggestion-text {
+  color: #000;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
   margin: 0;
-  color: #536471;
-  font-size: 15px;
+  font-style: italic;
+}
+
+/* Button container */
+.tooltip-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* Button base styles */
+.tooltip-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 90px;
+}
+
+/* Dismiss button */
+.dismiss-btn {
+  background: white;
+  color: #000;
+  border: 1px solid #000;
+}
+
+.dismiss-btn:hover {
+  background: #000;
+  color: white;
+  transform: translateY(-1px);
+}
+
+/* Rephrase button (main action) */
+.rephrase-btn {
+  background: #B880FF;
+  color: white;
+  border: 1px solid #B880FF;
+}
+
+.rephrase-btn:hover {
+  background: #9d5fdf;
+  border-color: #9d5fdf;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(184, 128, 255, 0.3);
+}
+
+/* Animation */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Responsive design */
+@media (max-width: 480px) {
+  .tooltip-container {
+    bottom: 10px;
+    right: 10px;
+    left: 10px;
+    max-width: none;
+  }
+  
+  .tooltip-buttons {
+    justify-content: center;
+  }
 }
