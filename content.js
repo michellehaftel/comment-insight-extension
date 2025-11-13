@@ -344,78 +344,105 @@ function checkForEscalation(element) {
 
 /**
  * Rephrase text using ECPM de-escalation strategies:
- * 1. Replace absolute truths with subjective statements ("in my opinion", "in my view")
- * 2. Replace "you" blame statements with "I" statements (self-accountability)
- * 3. Replace generalized statements with specific, personal ones
- * 4. Add acknowledgment of complexity
- * 5. Replace judging language with self-accountability
+ * 1. Transform "you are X" statements into "I" statements expressing personal perspective
+ * 2. Replace absolute truths with subjective statements
+ * 3. Replace blame statements with self-accountability
+ * 4. Replace generalized statements with specific, personal ones
+ * 5. Replace judging language with feelings and observations
  */
 function rephraseForDeEscalation(text) {
   let rephrased = text;
   
-  // 1. Replace absolute truth statements with subjective statements
-  rephrased = rephrased.replace(/\b(you are wrong|you're wrong)\b/gi, "I see it differently");
-  rephrased = rephrased.replace(/\b(i am right|i'm right)\b/gi, "from my perspective");
-  rephrased = rephrased.replace(/\b(that's not true|that is not true|that's false)\b/gi, "I understand it differently");
-  rephrased = rephrased.replace(/\b(you don't understand|you don't get it)\b/gi, "I'd like to share my perspective");
-  rephrased = rephrased.replace(/\b(that's ridiculous|that's absurd|that's stupid)\b/gi, "I find that challenging to understand");
+  // STEP 1: Deep transformations - "you are X" → "I feel/think/observe..."
+  // These catch common accusatory patterns and transform them completely
   
-  // 2. Replace "you" blame statements with "I" statements (self-accountability)
-  // Order matters - do more specific patterns first
-  rephrased = rephrased.replace(/\b(this|that|it) (?:is|was) (?:absolutely|completely|totally) (?:your|you're) (?:fault|problem)\b/gi, "I'm having a hard time with this");
+  // "You are [always/never/often/...] wrong" → "I often disagree with you" or "I often disagree with your perspective"
+  rephrased = rephrased.replace(/\b(?:you are|you're) (?:always|often|never|rarely|so|just|totally|completely|absolutely) wrong\b/gi, "I often disagree with your perspective");
+  rephrased = rephrased.replace(/\b(?:you are|you're) wrong\b/gi, "I see it differently");
+  
+  // "You are [always/never] [verb]ing" → "I notice that you sometimes/rarely [verb]"
+  rephrased = rephrased.replace(/\b(?:you are|you're) always (\w+ing)\b/gi, "I notice you sometimes $1");
+  rephrased = rephrased.replace(/\b(?:you are|you're) never (\w+ing)\b/gi, "I notice you rarely $1");
+  
+  // "You are [negative adjective]" → "I'm having difficulty with this"
+  rephrased = rephrased.replace(/\b(?:you are|you're) (?:terrible|awful|horrible|disgusting|pathetic|ridiculous|stupid|dumb|mean|cruel|selfish)\b/gi, "I'm having a strong reaction to this");
+  
+  // STEP 2: Transform "you [verb]" accusatory statements to "I" statements
+  
+  // "You always/never [verb]" → "I often/rarely notice that you [verb]"
+  rephrased = rephrased.replace(/\byou always ([\w\s]+?)(?=\.|!|,|$)/gi, "I often notice $1");
+  rephrased = rephrased.replace(/\byou never ([\w\s]+?)(?=\.|!|,|$)/gi, "I rarely see $1");
+  
+  // "You make me" → "I feel"
+  rephrased = rephrased.replace(/\byou (?:make|made) me (feel )?([\w\s]+?)(?=\.|!|,|$)/gi, "I feel $2");
+  
+  // General "you [negative action]" → "I observe/notice"
+  rephrased = rephrased.replace(/\byou (ignore|dismiss|attack|criticize|belittle|mock|insult)/gi, "I feel $1d");
+  
+  // STEP 3: Absolute truth statements → subjective statements
+  rephrased = rephrased.replace(/\b(?:i am|i'm) right\b/gi, "I believe this");
+  rephrased = rephrased.replace(/\b(?:that's|that is) (?:not true|false|a lie)\b/gi, "I understand it differently");
+  rephrased = rephrased.replace(/\b(?:you don't|you do not) (?:understand|get it|know)\b/gi, "I'd like to share my perspective");
+  rephrased = rephrased.replace(/\b(?:that's|that is) (?:ridiculous|absurd|stupid|insane|crazy)\b/gi, "I find that challenging to understand");
+  
+  // STEP 4: Fault/blame statements → self-accountability
+  rephrased = rephrased.replace(/\b(?:this|that|it) (?:is|was) (?:absolutely|completely|totally|all) (?:your|you're) (?:fault|problem|responsibility)\b/gi, "I'm having a hard time with this");
   rephrased = rephrased.replace(/\b(?:absolutely|completely|totally) (?:your|you're) (?:fault|problem)\b/gi, "I'm having a hard time with this");
-  rephrased = rephrased.replace(/\b(this|that|it) (?:is|was) (?:your|you're) (?:fault|problem)\b/gi, "I'm finding this difficult");
-  rephrased = rephrased.replace(/\bit's (?:your|you're) (?:fault|problem|issue)\b/gi, "I'm struggling with this");
-  rephrased = rephrased.replace(/\b(?:your|you're) (?:fault|problem|issue)\b/gi, "I'm struggling with this");
-  rephrased = rephrased.replace(/\b(you (?:make|made|cause|caused|force|forced) (?:me|us))\b/gi, "I feel");
-  rephrased = rephrased.replace(/\b(you always|you never)\b/gi, (match) => {
-    return match.replace(/you/i, "I notice that");
-  });
-  rephrased = rephrased.replace(/\b(you're always|you're never)\b/gi, (match) => {
-    return match.replace(/you're/i, "it seems");
-  });
+  rephrased = rephrased.replace(/\b(?:this|that|it) (?:is|was) (?:your|you're) (?:fault|problem|responsibility)\b/gi, "I'm finding this difficult");
+  rephrased = rephrased.replace(/\bit's (?:your|you're) (?:fault|problem|issue|responsibility)\b/gi, "I'm struggling with this");
+  rephrased = rephrased.replace(/\b(?:your|you're) (?:fault|problem|issue|responsibility)\b/gi, "I'm struggling with this");
   
-  // 3. Replace generalized/categorical statements with personal, specific ones
-  rephrased = rephrased.replace(/\b(the (?:arabs|palestinians|jews|israelis|leftists|rightists|republicans|democrats|liberals|conservatives))\b/gi, (match) => {
-    const group = match.replace(/the /i, "").toLowerCase();
+  // STEP 5: Generalized/categorical statements → specific, personal ones
+  rephrased = rephrased.replace(/\b(?:the|all) (?:arabs|palestinians|jews|israelis|leftists|rightists|republicans|democrats|liberals|conservatives)\b/gi, (match) => {
+    const group = match.replace(/(?:the|all) /i, "").toLowerCase();
     return `some ${group}`;
   });
-  rephrased = rephrased.replace(/\b(all (?:arabs|palestinians|jews|israelis|leftists|rightists|republicans|democrats|liberals|conservatives|of them|of you))\b/gi, "some people");
-  rephrased = rephrased.replace(/\b(every (?:arab|palestinian|jew|israeli|leftist|rightist|republican|democrat|liberal|conservative))\b/gi, "some people");
-  rephrased = rephrased.replace(/\b(they all|you all|all of you|all of them)\b/gi, "some people");
+  rephrased = rephrased.replace(/\ball (?:of them|of you|people)\b/gi, "some people");
+  rephrased = rephrased.replace(/\bevery(?:one|body)\b/gi, "many people");
+  rephrased = rephrased.replace(/\b(?:they all|you all)\b/gi, "some people");
   
-  // 4. Replace categorical/absolute words with more nuanced language
-  rephrased = rephrased.replace(/\b(always)\b/gi, "often");
-  rephrased = rephrased.replace(/\b(never)\b/gi, "rarely");
-  rephrased = rephrased.replace(/\b(everyone)\b/gi, "many people");
-  rephrased = rephrased.replace(/\b(nobody)\b/gi, "few people");
-  rephrased = rephrased.replace(/\b(completely|totally|absolutely|definitely|certainly)\b/gi, "largely");
-  rephrased = rephrased.replace(/\b(only|solely|exclusively)\b/gi, "primarily");
+  // STEP 6: Replace categorical/absolute words with nuanced language
+  // Note: Don't replace "always" and "never" if they were already part of a transformation above
+  if (!/\b(?:often|rarely|sometimes)\b/i.test(rephrased)) {
+    rephrased = rephrased.replace(/\balways\b/gi, "often");
+    rephrased = rephrased.replace(/\bnever\b/gi, "rarely");
+  }
+  rephrased = rephrased.replace(/\beveryone\b/gi, "many people");
+  rephrased = rephrased.replace(/\bnobody\b/gi, "few people");
+  rephrased = rephrased.replace(/\b(?:completely|totally|absolutely|definitely|certainly)\b/gi, "largely");
+  rephrased = rephrased.replace(/\b(?:only|solely|exclusively)\b/gi, "primarily");
   
-  // 5. Replace judging/condemning language with self-accountability
-  rephrased = rephrased.replace(/\b(you're (?:terrible|awful|horrible|disgusting|pathetic|ridiculous))\b/gi, "I'm having a strong reaction to this");
-  rephrased = rephrased.replace(/\b(that's (?:terrible|awful|horrible|disgusting|pathetic|ridiculous|stupid|dumb|idiotic))\b/gi, "I find this challenging");
-  rephrased = rephrased.replace(/\b(how (?:dare|could) you)\b/gi, "I'm surprised by this");
-  rephrased = rephrased.replace(/\b(you should (?:be ashamed|feel bad|know better))\b/gi, "I'm feeling hurt by this");
+  // STEP 7: Replace judging/condemning language with feelings
+  rephrased = rephrased.replace(/\b(?:how (?:dare|could) you)\b/gi, "I'm surprised by this");
+  rephrased = rephrased.replace(/\byou should (?:be ashamed|feel bad|know better)\b/gi, "I'm feeling hurt by this");
   
-  // 6. Replace dismissive language with acknowledgment
-  rephrased = rephrased.replace(/\b(that doesn't (?:matter|count|make sense))\b/gi, "I'm not sure I understand");
-  rephrased = rephrased.replace(/\b(i don't (?:care|give a|want to hear))\b/gi, "I'm having trouble engaging with this");
-  rephrased = rephrased.replace(/\b(whatever|who cares|so what)\b/gi, "I'm not sure how to respond");
+  // STEP 8: Replace dismissive language with acknowledgment
+  rephrased = rephrased.replace(/\b(?:that doesn't|that does not) (?:matter|count|make sense|work)\b/gi, "I'm not sure I understand");
+  rephrased = rephrased.replace(/\b(?:i don't|i do not) (?:care|give a|want to hear)\b/gi, "I'm having trouble engaging with this");
+  rephrased = rephrased.replace(/\b(?:whatever|who cares|so what)\b/gi, "I'm not sure how to respond");
   
-  // 7. Add subjective framing if the text doesn't already have it
-  if (!/\b(in my (?:opinion|view|experience|perspective)|i (?:think|feel|believe|see))\b/i.test(rephrased)) {
+  // STEP 9: Remove ALL exclamation marks (they add emotional intensity)
+  rephrased = rephrased.replace(/!/g, ".");
+  
+  // STEP 10: Add subjective framing if the text doesn't already have it
+  if (!/\b(?:in my|i (?:think|feel|believe|see|notice|find|observe|often|rarely))\b/i.test(rephrased)) {
     // Only add if it's a statement, not a question
     if (!rephrased.trim().endsWith('?')) {
       rephrased = "In my view, " + rephrased.charAt(0).toLowerCase() + rephrased.slice(1);
     }
   }
   
-  // 8. Remove excessive exclamation marks (keep max 1)
-  rephrased = rephrased.replace(/!{2,}/g, ".");
-  
-  // 9. Capitalize first letter
+  // STEP 11: Clean up punctuation - ensure proper sentence ending
+  rephrased = rephrased.replace(/\.{2,}/g, "."); // Remove multiple periods
+  rephrased = rephrased.replace(/\s+/g, " "); // Clean up extra spaces
   rephrased = rephrased.trim();
+  
+  // Make sure it ends with a period if it doesn't have ending punctuation
+  if (!/[.?]$/.test(rephrased)) {
+    rephrased += ".";
+  }
+  
+  // STEP 12: Capitalize first letter
   if (rephrased.length > 0) {
     rephrased = rephrased.charAt(0).toUpperCase() + rephrased.slice(1);
   }
@@ -439,6 +466,24 @@ function replaceTextViaExecCommand(element, text) {
     document.execCommand('selectAll', false, null);
     document.execCommand('delete', false, null);
     document.execCommand('insertText', false, text);
+    
+    // CRITICAL: Clear the selection and collapse to end so element is editable
+    setTimeout(() => {
+      if (selection) {
+        const newRange = document.createRange();
+        try {
+          newRange.selectNodeContents(element);
+          newRange.collapse(false); // Collapse to end
+          selection.removeAllRanges();
+          selection.addRange(newRange);
+        } catch (e) {
+          // Fallback: just clear selection
+          selection.removeAllRanges();
+        }
+      }
+      element.focus();
+    }, 50);
+    
     return true;
   } catch (e) {
     console.warn("execCommand failed:", e);
@@ -732,7 +777,7 @@ function createEscalationTooltip(originalText, element) {
     if (targetElement) {
       const success = replaceTextInElement(targetElement, rephrasedText);
       if (success) {
-        // Verify the text was actually replaced
+        // Verify the text was actually replaced and re-enable editing
         setTimeout(() => {
           const verifyText = getTextContent(targetElement);
           const wasReplaced = verifyText.trim() === rephrasedText.trim() || 
@@ -740,6 +785,23 @@ function createEscalationTooltip(originalText, element) {
           
           if (wasReplaced) {
             console.log("✅ Text successfully rephrased! New text:", verifyText);
+            
+            // Ensure element is focused and editable
+            targetElement.focus();
+            
+            // Clear any lingering selections
+            const selection = window.getSelection();
+            if (selection && selection.rangeCount > 0) {
+              const range = document.createRange();
+              try {
+                range.selectNodeContents(targetElement);
+                range.collapse(false); // Collapse to end
+                selection.removeAllRanges();
+                selection.addRange(range);
+              } catch (e) {
+                // Ignore errors
+              }
+            }
           } else {
             console.error("❌ Text replacement failed! Expected:", rephrasedText, "Got:", verifyText);
             justRephrased = false; // Reset flag if replacement failed
@@ -752,7 +814,7 @@ function createEscalationTooltip(originalText, element) {
               console.log("🔄 Re-enabled escalation detection");
             }, 2000);
           }
-        }, 200); // Increased timeout to give DOM more time to update
+        }, 250); // Slightly increased timeout for better reliability
       } else {
         console.error("❌ Failed to replace text");
         justRephrased = false; // Reset if failed
