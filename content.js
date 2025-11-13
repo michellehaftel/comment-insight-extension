@@ -48,6 +48,8 @@ function isEscalating(text) {
   // 1. Absolute truth statements
   const absoluteTruthPatterns = [
     /\b(you are wrong|you're wrong)\b/i,
+    /\b(you are (?:always|never|totally|completely|absolutely|so|just) wrong)\b/i, // "you are [adverb] wrong"
+    /\b(you're (?:always|never|totally|completely|absolutely|so|just) wrong)\b/i,
     /\b(i am right|i'm right)\b/i,
     /\b(i totally disagree|completely disagree|absolutely wrong)\b/i,
     /\b(that's not true|that is not true|that's false)\b/i,
@@ -83,16 +85,21 @@ function isEscalating(text) {
     /\b(only|solely|exclusively|completely|totally|absolutely|definitely|certainly)\b/i
   ];
   
-  // Count occurrences of categorical words (need multiple to be significant)
+  // Count occurrences of categorical words
   let categoricalCount = 0;
   categoricalWords.forEach(pattern => {
     const matches = trimmedText.match(new RegExp(pattern.source, 'gi'));
     if (matches) categoricalCount += matches.length;
   });
   
+  // For short texts (< 50 chars), even 1 categorical word is significant
+  // For longer texts, need 2+ to be significant
   if (categoricalCount >= 2) {
     escalationScore += 1.5;
     reasons.push("Multiple categorical/absolute words");
+  } else if (categoricalCount === 1 && trimmedText.length < 50) {
+    escalationScore += 1;
+    reasons.push("Categorical/absolute language in short text");
   }
 
   // ===== EMOTIONAL DIMENSION: Blame =====
@@ -218,14 +225,28 @@ function isEscalating(text) {
   // Threshold: Score of 2.5 or higher indicates escalation
   const isEscalatory = escalationScore >= 2.5;
   
-  if (isEscalatory) {
-    console.log(`🚨 Escalation detected (score: ${escalationScore.toFixed(1)})`, {
-      text: trimmedText.substring(0, 100) + (trimmedText.length > 100 ? '...' : ''),
-      reasons: reasons
-    });
+  // Debug logging (always show score for texts longer than 10 chars)
+  if (trimmedText.length > 10) {
+    if (isEscalatory) {
+      console.log(`🚨 Escalation detected (score: ${escalationScore.toFixed(1)})`, {
+        text: trimmedText.substring(0, 100) + (trimmedText.length > 100 ? '...' : ''),
+        reasons: reasons
+      });
+    } else {
+      console.log(`✓ No escalation (score: ${escalationScore.toFixed(1)} < 2.5)`, {
+        text: trimmedText.substring(0, 50),
+        reasons: reasons.length > 0 ? reasons : ['none']
+      });
+    }
   }
   
   return isEscalatory;
+}
+
+function isTwitter() {
+  // Check if we're on Twitter/X
+  return window.location.hostname.includes('twitter.com') || 
+         window.location.hostname.includes('x.com');
 }
 
 function getTextContent(element) {
@@ -402,84 +423,27 @@ function rephraseForDeEscalation(text) {
   return rephrased;
 }
 
-// Simulate typing text character by character (most reliable for Facebook)
-function simulateTyping(element, text) {
-  return new Promise((resolve) => {
-    element.focus();
-    
-    // Select all existing text first
-    const selection = window.getSelection();
-    const range = document.createRange();
-    range.selectNodeContents(element);
-    selection.removeAllRanges();
-    selection.addRange(range);
-    
-    // Clear existing content
-    element.textContent = '';
-    element.innerText = '';
-    
-    // Reset range after clearing
-    range.selectNodeContents(element);
-    selection.removeAllRanges();
-    selection.addRange(range);
-    
-    // Now type the new text character by character
-    let index = 0;
-    const typeChar = () => {
-      if (index < text.length) {
-        const char = text[index];
-        
-        // Create and dispatch keyboard events
-        const keydownEvent = new KeyboardEvent('keydown', {
-          key: char,
-          code: char === ' ' ? 'Space' : `Key${char.toUpperCase()}`,
-          bubbles: true,
-          cancelable: true
-        });
-        
-        const keypressEvent = new KeyboardEvent('keypress', {
-          key: char,
-          char: char,
-          bubbles: true,
-          cancelable: true
-        });
-        
-        const inputEvent = new InputEvent('input', {
-          bubbles: true,
-          cancelable: true,
-          inputType: 'insertText',
-          data: char
-        });
-        
-        element.dispatchEvent(keydownEvent);
-        element.dispatchEvent(keypressEvent);
-        
-        // Insert the character
-        const textNode = document.createTextNode(char);
-        range.insertNode(textNode);
-        range.setStartAfter(textNode);
-        range.collapse(false);
-        selection.removeAllRanges();
-        selection.addRange(range);
-        
-        element.dispatchEvent(inputEvent);
-        
-        const keyupEvent = new KeyboardEvent('keyup', {
-          key: char,
-          bubbles: true,
-          cancelable: true
-        });
-        element.dispatchEvent(keyupEvent);
-        
-        index++;
-        setTimeout(typeChar, 10); // Small delay between characters
-      } else {
-        resolve();
-      }
-    };
-    
-    typeChar();
-  });
+// Replace text in contenteditable using various methods
+function replaceTextViaExecCommand(element, text) {
+  element.focus();
+  
+  // Select all existing text
+  const selection = window.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  selection.removeAllRanges();
+  selection.addRange(range);
+  
+  // Try execCommand first (most compatible)
+  try {
+    document.execCommand('selectAll', false, null);
+    document.execCommand('delete', false, null);
+    document.execCommand('insertText', false, text);
+    return true;
+  } catch (e) {
+    console.warn("execCommand failed:", e);
+    return false;
+  }
 }
 
 function replaceTextInElement(element, newText) {
@@ -507,35 +471,20 @@ function replaceTextInElement(element, newText) {
       element.focus?.({ preventScroll: true });
       
       if (isTwitter()) {
-        console.log("Tweeter/X composer detected → using simulated typing replacement");
-        const selection = window.getSelection();
-        if (selection) {
-          selection.removeAllRanges();
-          const range = document.createRange();
-          try {
-            range.selectNodeContents(element);
-          } catch (selectErr) {
-            console.warn("Twitter range select failed, falling back to element:", selectErr);
-            range.selectNode(element);
-          }
-          selection.addRange(range);
+        console.log("Twitter/X composer detected → using execCommand");
+        const success = replaceTextViaExecCommand(element, newText);
+        if (success) {
+          setTimeout(() => {
+            setCaretToEnd(element);
+            const verifyText = getTextContent(element);
+            if (verifyText.trim() === newText.trim() || verifyText.includes(newText.substring(0, Math.min(newText.length, 15)))) {
+              console.log("✅ Twitter composer updated successfully");
+            } else {
+              console.warn("⚠️ Twitter composer verification mismatch", { expected: newText, got: verifyText });
+            }
+          }, 100);
         }
-        
-        // Delete existing content and type the new text character by character
-        document.execCommand?.('selectAll', false, null);
-        document.execCommand?.('delete', false, null);
-        
-        simulateTyping(element, newText).then(() => {
-          console.log("✅ Twitter simulated typing completed");
-          setCaretToEnd(element);
-          const verifyText = getTextContent(element);
-          if (verifyText.trim() === newText.trim() || verifyText.includes(newText.substring(0, Math.min(newText.length, 15)))) {
-            console.log("✅ Twitter composer updated successfully");
-          } else {
-            console.warn("⚠️ Twitter composer verification mismatch", { expected: newText, got: verifyText });
-          }
-        });
-        return true;
+        return success;
       }
       
       // Ensure the full content is selected before replacement
@@ -552,22 +501,24 @@ function replaceTextInElement(element, newText) {
         selection.addRange(range);
       }
       
-      // Method 0.1: Use Lexical editor API if available (Facebook)
+      // Method 0.1: Check for Facebook's Lexical editor
       const lexicalRoot = element.__lexicalEditor ? element : element.querySelector?.('[data-lexical-editor="true"]');
       const lexicalEditor = lexicalRoot && lexicalRoot.__lexicalEditor;
       if (lexicalEditor) {
-        console.log("Facebook editor detected → using simulated typing replacement");
-        simulateTyping(element, newText).then(() => {
-          console.log("✅ Facebook simulated typing completed");
-          setCaretToEnd(element);
-          const verifyText = getTextContent(element);
-          if (verifyText.trim() === newText.trim() || verifyText.includes(newText.substring(0, Math.min(newText.length, 15)))) {
-            console.log("✅ Facebook composer updated successfully");
-          } else {
-            console.warn("⚠️ Facebook composer verification mismatch", { expected: newText, got: verifyText });
-          }
-        });
-        return true;
+        console.log("Facebook Lexical editor detected → using execCommand");
+        const success = replaceTextViaExecCommand(element, newText);
+        if (success) {
+          setTimeout(() => {
+            setCaretToEnd(element);
+            const verifyText = getTextContent(element);
+            if (verifyText.trim() === newText.trim() || verifyText.includes(newText.substring(0, Math.min(newText.length, 15)))) {
+              console.log("✅ Facebook composer updated successfully");
+            } else {
+              console.warn("⚠️ Facebook composer verification mismatch", { expected: newText, got: verifyText });
+            }
+          }, 100);
+        }
+        return success;
       }
       
       // Method 1: execCommand (browser native, works with most editors)
@@ -663,14 +614,20 @@ function replaceTextInElement(element, newText) {
         }
       });
       
-      // Method 3: If still not working, try keyboard simulation (slower but more reliable)
+      // Method 3: Verification and fallback
       setTimeout(() => {
         const verifyText = getTextContent(element);
         if (verifyText.trim() !== newText.trim() && !verifyText.includes(newText.substring(0, 15))) {
-          console.log("Method 2 failed, trying Method 3: Keyboard simulation");
-          simulateTyping(element, newText).then(() => {
-            console.log("✅ Keyboard simulation completed");
+          console.log("Method 2 failed, attempting final fallback with events");
+          element.textContent = newText;
+          
+          // Dispatch comprehensive events
+          ['input', 'change', 'keyup'].forEach(eventType => {
+            const event = new Event(eventType, { bubbles: true, cancelable: true });
+            element.dispatchEvent(event);
           });
+          
+          setCaretToEnd(element);
         }
       }, 100);
       

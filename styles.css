@@ -1,11 +1,16 @@
-/* Tooltip container */
-.tooltip-container {
+/* Escalation tooltip wrapper */
+.escalation-tooltip {
   position: fixed;
   bottom: 20px;
   right: 20px;
   z-index: 9999;
   max-width: 400px;
   animation: slideIn 0.3s ease-out;
+}
+
+/* Tooltip container (inner wrapper) */
+.tooltip-container {
+  display: block;
 }
 
 /* Tooltip content */
@@ -116,7 +121,7 @@
 
 /* Responsive design */
 @media (max-width: 480px) {
-  .tooltip-container {
+  .escalation-tooltip {
     bottom: 10px;
     right: 10px;
     left: 10px;
