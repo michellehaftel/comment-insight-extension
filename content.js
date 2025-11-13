@@ -450,43 +450,62 @@ function rephraseForDeEscalation(text) {
   return rephrased;
 }
 
-// Replace text in contenteditable using various methods
+// Replace text using the most reliable method for each platform
 function replaceTextViaExecCommand(element, text) {
   element.focus();
   
-  // Select all existing text
-  const selection = window.getSelection();
-  const range = document.createRange();
-  range.selectNodeContents(element);
-  selection.removeAllRanges();
-  selection.addRange(range);
-  
-  // Try execCommand first (most compatible)
   try {
+    // Select all existing text first
+    const selection = window.getSelection();
+    if (selection) {
+      selection.removeAllRanges();
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      selection.addRange(range);
+    }
+    
+    // Try execCommand approach (select all, delete, insert)
     document.execCommand('selectAll', false, null);
     document.execCommand('delete', false, null);
-    document.execCommand('insertText', false, text);
     
-    // CRITICAL: Clear the selection and collapse to end so element is editable
-    setTimeout(() => {
-      if (selection) {
-        const newRange = document.createRange();
-        try {
-          newRange.selectNodeContents(element);
-          newRange.collapse(false); // Collapse to end
-          selection.removeAllRanges();
-          selection.addRange(newRange);
-        } catch (e) {
-          // Fallback: just clear selection
-          selection.removeAllRanges();
+    // Insert the new text
+    const insertSuccess = document.execCommand('insertText', false, text);
+    
+    if (insertSuccess) {
+      console.log("✅ Text replaced successfully via execCommand");
+      
+      // Position cursor at the end
+      setTimeout(() => {
+        if (selection && element.firstChild) {
+          try {
+            const range = document.createRange();
+            const textNode = element.firstChild;
+            
+            if (textNode.nodeType === Node.TEXT_NODE) {
+              const len = textNode.length;
+              range.setStart(textNode, len);
+              range.collapse(true);
+            } else {
+              range.selectNodeContents(element);
+              range.collapse(false);
+            }
+            
+            selection.removeAllRanges();
+            selection.addRange(range);
+          } catch (e) {
+            console.warn("Could not position cursor:", e);
+          }
         }
-      }
-      element.focus();
-    }, 50);
+        element.focus();
+      }, 10);
+      
+      return true;
+    }
     
-    return true;
+    console.log("execCommand failed, trying direct manipulation...");
+    return false;
   } catch (e) {
-    console.warn("execCommand failed:", e);
+    console.error("replaceTextViaExecCommand failed:", e);
     return false;
   }
 }
@@ -520,14 +539,13 @@ function replaceTextInElement(element, newText) {
         const success = replaceTextViaExecCommand(element, newText);
         if (success) {
           setTimeout(() => {
-            setCaretToEnd(element);
             const verifyText = getTextContent(element);
             if (verifyText.trim() === newText.trim() || verifyText.includes(newText.substring(0, Math.min(newText.length, 15)))) {
               console.log("✅ Twitter composer updated successfully");
             } else {
               console.warn("⚠️ Twitter composer verification mismatch", { expected: newText, got: verifyText });
             }
-          }, 100);
+          }, 150);
         }
         return success;
       }
@@ -554,14 +572,13 @@ function replaceTextInElement(element, newText) {
         const success = replaceTextViaExecCommand(element, newText);
         if (success) {
           setTimeout(() => {
-            setCaretToEnd(element);
             const verifyText = getTextContent(element);
             if (verifyText.trim() === newText.trim() || verifyText.includes(newText.substring(0, Math.min(newText.length, 15)))) {
               console.log("✅ Facebook composer updated successfully");
             } else {
               console.warn("⚠️ Facebook composer verification mismatch", { expected: newText, got: verifyText });
             }
-          }, 100);
+          }, 150);
         }
         return success;
       }
@@ -786,22 +803,31 @@ function createEscalationTooltip(originalText, element) {
           if (wasReplaced) {
             console.log("✅ Text successfully rephrased! New text:", verifyText);
             
-            // Ensure element is focused and editable
-            targetElement.focus();
-            
-            // Clear any lingering selections
-            const selection = window.getSelection();
-            if (selection && selection.rangeCount > 0) {
-              const range = document.createRange();
-              try {
-                range.selectNodeContents(targetElement);
-                range.collapse(false); // Collapse to end
-                selection.removeAllRanges();
-                selection.addRange(range);
-              } catch (e) {
-                // Ignore errors
+            // Simple focus to ensure editability - don't over-complicate
+            setTimeout(() => {
+              targetElement.focus();
+              
+              // Place cursor at end
+              const selection = window.getSelection();
+              if (selection && targetElement.firstChild) {
+                const range = document.createRange();
+                try {
+                  const textNode = targetElement.firstChild;
+                  if (textNode.nodeType === Node.TEXT_NODE) {
+                    const len = textNode.textContent?.length || 0;
+                    range.setStart(textNode, len);
+                    range.setEnd(textNode, len);
+                  } else {
+                    range.selectNodeContents(targetElement);
+                    range.collapse(false);
+                  }
+                  selection.removeAllRanges();
+                  selection.addRange(range);
+                } catch (e) {
+                  console.warn("Could not set cursor:", e);
+                }
               }
-            }
+            }, 100);
           } else {
             console.error("❌ Text replacement failed! Expected:", rephrasedText, "Got:", verifyText);
             justRephrased = false; // Reset flag if replacement failed
@@ -853,13 +879,13 @@ function attachListeners(element) {
   }, 300);
 
   // Listen to multiple events for better compatibility
-  element.addEventListener("input", debouncedCheck);
-  element.addEventListener("keyup", debouncedCheck);
-  element.addEventListener("keydown", debouncedCheck); // Also check on keydown for faster response
+  // NOTE: We don't listen to keydown to avoid interfering with delete/backspace operations
+  element.addEventListener("input", debouncedCheck, { passive: true });
+  element.addEventListener("keyup", debouncedCheck, { passive: true });
   element.addEventListener("paste", () => {
     setTimeout(debouncedCheck, 100); // Wait for paste to complete
-  });
-  element.addEventListener("compositionend", debouncedCheck); // For IME input
+  }, { passive: true });
+  element.addEventListener("compositionend", debouncedCheck, { passive: true }); // For IME input
   
   // For textareas, also listen to change event
   if (element.tagName === 'TEXTAREA') {
