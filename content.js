@@ -6,6 +6,94 @@
  * 1. Cognitive: Argumentative talk (absolute truths) vs Subjective talk
  * 2. Emotional: Blame (projecting negative emotions) vs Self-accountability
  */
+
+// ===== DATA LOGGING FUNCTIONS =====
+
+/**
+ * Extract context about the post/comment being replied to
+ */
+function getPostContext() {
+  // Try to find the original post content and author on Twitter/X
+  let originalPostContent = '';
+  let originalPostWriter = '';
+  
+  try {
+    // For Twitter/X - try to find the tweet we're replying to
+    const tweetTextElements = document.querySelectorAll('[data-testid="tweetText"]');
+    if (tweetTextElements.length > 0) {
+      // Get the first tweet text (usually the one being replied to)
+      originalPostContent = tweetTextElements[0].textContent || '';
+    }
+    
+    // Try to find the author
+    const authorElements = document.querySelectorAll('[data-testid="User-Name"]');
+    if (authorElements.length > 0) {
+      originalPostWriter = authorElements[0].textContent || '';
+    }
+    
+    // For Facebook - different selectors
+    if (!originalPostContent) {
+      const fbPostElements = document.querySelectorAll('[data-ad-preview="message"]');
+      if (fbPostElements.length > 0) {
+        originalPostContent = fbPostElements[0].textContent || '';
+      }
+    }
+  } catch (error) {
+    console.warn('Could not extract post context:', error);
+  }
+  
+  return {
+    originalPostContent: originalPostContent.substring(0, 500), // Limit length
+    originalPostWriter: originalPostWriter.substring(0, 100)
+  };
+}
+
+function detectPlatformName() {
+  const host = window.location.hostname;
+  if (/twitter\.com|x\.com/i.test(host)) return 'twitter';
+  if (/facebook\.com/i.test(host)) return 'facebook';
+  if (/instagram\.com/i.test(host)) return 'instagram';
+  if (/reddit\.com/i.test(host)) return 'reddit';
+  return host || 'unknown';
+}
+
+/**
+ * Log interaction data to background script for Google Sheets
+ */
+async function logInteraction(data) {
+  try {
+    const postContext = getPostContext();
+    
+    const logData = {
+      date: new Date().toISOString(),
+      original_post_content: postContext.originalPostContent,
+      original_post_writer: postContext.originalPostWriter,
+      user_original_text: data.usersOriginalContent || '',
+      rephrase_suggestion: data.rephraseSuggestion || '',
+      did_user_accept: data.didUserAccept || 'no',
+      escalation_type: data.escalationType || 'unknown',
+      platform: detectPlatformName(),
+      context: window.location.href
+    };
+    
+    console.log('📊 Logging interaction:', logData);
+    
+    // Send to background script
+    chrome.runtime.sendMessage({
+      type: 'LOG_INTERACTION',
+      data: logData
+    }, (response) => {
+      if (response && response.success) {
+        console.log('✅ Data logged successfully');
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error logging interaction:', error);
+  }
+}
+
+// ===== ESCALATION DETECTION =====
+
 function hasHighRiskKeywords(text) {
   const lowercase = text.toLowerCase();
   const keywordList = [
@@ -36,7 +124,7 @@ function isEscalating(text) {
   
   // Minimum length threshold
   if (trimmedText.length < 8 && !hasHighRiskKeywords(trimmedText)) {
-    return false;
+    return { isEscalatory: false, escalationType: 'none' };
   }
 
   let escalationScore = 0;
@@ -224,13 +312,27 @@ function isEscalating(text) {
 
   // Threshold: Score of 2.5 or higher indicates escalation
   const isEscalatory = escalationScore >= 2.5;
+  let escalationType = 'none';
+  
+  if (isEscalatory) {
+    if (hasArgumentative && hasBlame) {
+      escalationType = 'both';
+    } else if (hasArgumentative) {
+      escalationType = 'cognitive';
+    } else if (hasBlame) {
+      escalationType = 'emotional';
+    } else {
+      escalationType = 'other';
+    }
+  }
   
   // Debug logging (always show score for texts longer than 10 chars)
   if (trimmedText.length > 10) {
     if (isEscalatory) {
       console.log(`🚨 Escalation detected (score: ${escalationScore.toFixed(1)})`, {
         text: trimmedText.substring(0, 100) + (trimmedText.length > 100 ? '...' : ''),
-        reasons: reasons
+        reasons: reasons,
+        escalationType
       });
     } else {
       console.log(`✓ No escalation (score: ${escalationScore.toFixed(1)} < 2.5)`, {
@@ -240,7 +342,11 @@ function isEscalating(text) {
     }
   }
   
-  return isEscalatory;
+  return {
+    isEscalatory,
+    escalationType,
+    reasons
+  };
 }
 
 function isTwitter() {
@@ -330,9 +436,11 @@ function checkForEscalation(element) {
     console.log("🔍 Checking text:", text.substring(0, 50) + (text.length > 50 ? '...' : ''));
   }
   
-  if (isEscalating(text)) {
+  const escalationResult = isEscalating(text);
+  
+  if (escalationResult.isEscalatory) {
     console.log("🚨 Escalation detected - showing warning tooltip");
-    createEscalationTooltip(text, element);
+    createEscalationTooltip(text, element, escalationResult.escalationType);
   } else {
     const existingTooltip = document.querySelector(".escalation-tooltip");
     if (existingTooltip) {
@@ -709,7 +817,7 @@ function replaceTextInElement(element, newText) {
   }
 }
 
-function createEscalationTooltip(originalText, element) {
+function createEscalationTooltip(originalText, element, escalationType = 'unknown') {
   // Remove if already shown
   const existing = document.querySelector(".escalation-tooltip");
   if (existing) existing.remove();
@@ -775,6 +883,14 @@ function createEscalationTooltip(originalText, element) {
 
   // Add event listeners for buttons
   document.getElementById("dismissBtn").onclick = () => {
+    // Log that user dismissed the suggestion
+    logInteraction({
+      usersOriginalContent: originalText,
+      rephraseSuggestion: rephrasedText,
+      didUserAccept: 'no',
+      escalationType
+    });
+    
     tooltip.remove();
   };
 
@@ -802,6 +918,14 @@ function createEscalationTooltip(originalText, element) {
           
           if (wasReplaced) {
             console.log("✅ Text successfully rephrased! New text:", verifyText);
+            
+            // Log that user accepted the suggestion
+            logInteraction({
+              usersOriginalContent: originalText,
+              rephraseSuggestion: rephrasedText,
+              didUserAccept: 'yes',
+              escalationType
+            });
             
             // Simple focus to ensure editability - don't over-complicate
             setTimeout(() => {

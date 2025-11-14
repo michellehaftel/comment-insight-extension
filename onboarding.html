@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>De-Escalator - Welcome</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 500px;
+      width: 100%;
+      padding: 40px;
+      animation: slideIn 0.4s ease-out;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .emoji {
+      text-align: center;
+      font-size: 64px;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      text-align: center;
+      color: #333;
+      font-size: 28px;
+      margin-bottom: 12px;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #666;
+      font-size: 15px;
+      margin-bottom: 32px;
+      line-height: 1.5;
+    }
+
+    .form-group {
+      margin-bottom: 24px;
+    }
+
+    label {
+      display: block;
+      color: #333;
+      font-weight: 600;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    select, input[type="number"] {
+      width: 100%;
+      padding: 12px 16px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 15px;
+      font-family: inherit;
+      transition: all 0.2s;
+      background: white;
+    }
+
+    select:focus, input[type="number"]:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .button-container {
+      margin-top: 32px;
+    }
+
+    button {
+      width: 100%;
+      padding: 14px 24px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .privacy-note {
+      margin-top: 24px;
+      padding: 16px;
+      background: #f5f5f5;
+      border-radius: 8px;
+      font-size: 13px;
+      color: #666;
+      line-height: 1.5;
+    }
+
+    .privacy-note strong {
+      color: #667eea;
+    }
+
+    .error-message {
+      color: #d32f2f;
+      font-size: 13px;
+      margin-top: 8px;
+      display: none;
+    }
+
+    .error-message.show {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="emoji">🕊️</div>
+    <h1>Welcome to De-Escalator</h1>
+    <p class="subtitle">
+      Help us understand online discourse better! This extension will help you communicate more constructively while anonymously contributing to research.
+    </p>
+
+    <form id="onboardingForm">
+      <div class="form-group">
+        <label for="gender">Gender</label>
+        <select id="gender" name="gender" required>
+          <option value="">Select your gender</option>
+          <option value="male">Male</option>
+          <option value="female">Female</option>
+          <option value="non-binary">Non-binary</option>
+          <option value="prefer-not-to-say">Prefer not to say</option>
+          <option value="other">Other</option>
+        </select>
+        <div class="error-message" id="genderError">Please select your gender</div>
+      </div>
+
+      <div class="form-group">
+        <label for="age">Age</label>
+        <input 
+          type="number" 
+          id="age" 
+          name="age" 
+          min="13" 
+          max="120" 
+          placeholder="Enter your age"
+          required
+        >
+        <div class="error-message" id="ageError">Please enter a valid age (13-120)</div>
+      </div>
+
+      <div class="privacy-note">
+        <strong>🔒 Your Privacy Matters</strong><br>
+        Your responses are used for research purposes only. All data is stored anonymously and will be used to study online communication patterns.
+      </div>
+
+      <div class="button-container">
+        <button type="submit" id="submitBtn">Get Started</button>
+      </div>
+    </form>
+  </div>
+
+  <script src="onboarding.js"></script>
+</body>
+</html>
+
