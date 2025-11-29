@@ -89,9 +89,6 @@ comment-insight-extension/
 
 Contributions are welcome! This extension is designed to help reduce online conflicts and promote healthier discourse.
 
-## 📄 License
-
-[Your License Here]
 
 ## 🔬 Research Foundation
 
