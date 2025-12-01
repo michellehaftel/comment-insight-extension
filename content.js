@@ -11,40 +11,120 @@
 
 /**
  * Extract context about the post/comment being replied to
+ * Returns "new" for original posts, or the original post content for replies
  */
 function getPostContext() {
-  // Try to find the original post content and author on Twitter/X
   let originalPostContent = '';
   let originalPostWriter = '';
+  let isReply = false;
   
   try {
-    // For Twitter/X - try to find the tweet we're replying to
-    const tweetTextElements = document.querySelectorAll('[data-testid="tweetText"]');
-    if (tweetTextElements.length > 0) {
-      // Get the first tweet text (usually the one being replied to)
-      originalPostContent = tweetTextElements[0].textContent || '';
-    }
-    
-    // Try to find the author
-    const authorElements = document.querySelectorAll('[data-testid="User-Name"]');
-    if (authorElements.length > 0) {
-      originalPostWriter = authorElements[0].textContent || '';
+    // For Twitter/X - check if we're replying or creating a new post
+    if (isTwitter()) {
+      // Look for "Replying to" text indicator - this is the most reliable way to detect replies
+      const allText = document.body ? document.body.innerText || '' : '';
+      const hasReplyingTo = /Replying to\s+@?\w+/i.test(allText);
+      
+      // Also check for reply-specific elements near the composer
+      const composerArea = document.querySelector('[data-testid="tweetTextarea_0"]')?.closest('div[role="dialog"], div[data-testid="toolBar"]')?.parentElement;
+      const replyIndicator = composerArea ? Array.from(composerArea.querySelectorAll('*')).find(el => 
+        el.textContent && /Replying to/i.test(el.textContent)
+      ) : null;
+      
+      if (hasReplyingTo || replyIndicator) {
+        isReply = true;
+        
+        // Try to find the tweet we're replying to (only in reply context)
+        const tweetTextElements = document.querySelectorAll('[data-testid="tweetText"]');
+        if (tweetTextElements.length > 0) {
+          // Find the tweet text that's closest to the reply indicator or in the same container
+          let targetTweet = tweetTextElements[0];
+          
+          // Try to find tweet in the same thread/container as the composer
+          if (composerArea) {
+            const tweetInComposerArea = Array.from(tweetTextElements).find(tweet => 
+              composerArea.contains(tweet.closest('article'))
+            );
+            if (tweetInComposerArea) {
+              targetTweet = tweetInComposerArea;
+            }
+          }
+          
+          originalPostContent = targetTweet.textContent || '';
+        }
+        
+        // Try to find the author of the tweet being replied to
+        const authorElements = document.querySelectorAll('[data-testid="User-Name"]');
+        if (authorElements.length > 0) {
+          // Get author near the tweet we found
+          const tweetArticle = tweetTextElements[0]?.closest('article');
+          if (tweetArticle) {
+            const authorInArticle = tweetArticle.querySelector('[data-testid="User-Name"]');
+            if (authorInArticle) {
+              originalPostWriter = authorInArticle.textContent || '';
+            }
+          }
+          
+          // Fallback to first author if we couldn't find one in the article
+          if (!originalPostWriter && authorElements.length > 0) {
+            originalPostWriter = authorElements[0].textContent || '';
+          }
+        }
+        
+        // Extract username from "Replying to @username" text if we haven't found it
+        if (replyIndicator && !originalPostWriter) {
+          const replyText = replyIndicator.textContent || '';
+          const usernameMatch = replyText.match(/Replying to\s+(@?\w+)/i);
+          if (usernameMatch) {
+            originalPostWriter = usernameMatch[1].startsWith('@') ? usernameMatch[1] : '@' + usernameMatch[1];
+          }
+        }
+      } else {
+        // No "Replying to" indicator found - this is a new post
+        isReply = false;
+        originalPostContent = 'new';
+        originalPostWriter = 'new';
+      }
     }
     
     // For Facebook - different selectors
-    if (!originalPostContent) {
+    if (!isReply && /facebook\.com/i.test(window.location.hostname)) {
       const fbPostElements = document.querySelectorAll('[data-ad-preview="message"]');
       if (fbPostElements.length > 0) {
-        originalPostContent = fbPostElements[0].textContent || '';
+        // Check if we're replying to a comment
+        const replyIndicator = document.querySelector('[aria-label*="reply" i], [aria-label*="comment" i]');
+        if (replyIndicator) {
+          isReply = true;
+          originalPostContent = fbPostElements[0].textContent || '';
+        } else {
+          isReply = false;
+          originalPostContent = 'new';
+          originalPostWriter = 'new';
+        }
+      } else {
+        // No post found, assume new post
+        isReply = false;
+        originalPostContent = 'new';
+        originalPostWriter = 'new';
       }
+    }
+    
+    // If no context detected and we haven't determined it's a new post yet
+    if (!originalPostContent && !isReply) {
+      originalPostContent = 'new';
+      originalPostWriter = 'new';
     }
   } catch (error) {
     console.warn('Could not extract post context:', error);
+    // On error, assume it's a new post
+    originalPostContent = 'new';
+    originalPostWriter = 'new';
   }
   
   return {
-    originalPostContent: originalPostContent.substring(0, 500), // Limit length
-    originalPostWriter: originalPostWriter.substring(0, 100)
+    originalPostContent: originalPostContent ? originalPostContent.substring(0, 500) : 'new',
+    originalPostWriter: originalPostWriter ? originalPostWriter.substring(0, 100) : 'new',
+    isReply: isReply
   };
 }
 
@@ -64,19 +144,29 @@ async function logInteraction(data) {
   try {
     const postContext = getPostContext();
     
+    // Handle new posts vs replies
+    const originalPostContent = postContext.isReply 
+      ? postContext.originalPostContent 
+      : 'new';
+    const originalPostWriter = postContext.isReply 
+      ? postContext.originalPostWriter 
+      : 'new';
+    
     const logData = {
       date: new Date().toISOString(),
-      original_post_content: postContext.originalPostContent,
-      original_post_writer: postContext.originalPostWriter,
+      original_post_content: originalPostContent,
+      original_post_writer: originalPostWriter,
       user_original_text: data.usersOriginalContent || '',
       rephrase_suggestion: data.rephraseSuggestion || '',
       did_user_accept: data.didUserAccept || 'no',
       escalation_type: data.escalationType || 'unknown',
       platform: detectPlatformName(),
-      context: window.location.href
+      context: window.location.href,
+      post_type: postContext.isReply ? 'reply' : 'new_post'
     };
     
     console.log('📊 Logging interaction:', logData);
+    console.log(`📝 Post type: ${postContext.isReply ? 'Reply' : 'New Post'}`);
     
     // Send to background script
     chrome.runtime.sendMessage({
@@ -559,58 +649,131 @@ function rephraseForDeEscalation(text) {
 }
 
 // Replace text using the most reliable method for each platform
+// Uses execCommand which preserves editor functionality (including deletion)
 function replaceTextViaExecCommand(element, text) {
-  element.focus();
+  if (!element) return false;
+  
+  // Ensure element is focused and editable
+  element.focus({ preventScroll: true });
   
   try {
-    // Select all existing text first
     const selection = window.getSelection();
-    if (selection) {
-      selection.removeAllRanges();
-      const range = document.createRange();
+    if (!selection) return false;
+    
+    // Clear any existing selection first
+    selection.removeAllRanges();
+    
+    // Select all content in the element
+    const range = document.createRange();
+    try {
       range.selectNodeContents(element);
       selection.addRange(range);
+    } catch (e) {
+      console.warn("Could not select node contents:", e);
+      return false;
     }
     
-    // Try execCommand approach (select all, delete, insert)
+    // Use execCommand to replace - this preserves editor structure
+    // First, select all (redundant but helps ensure selection)
     document.execCommand('selectAll', false, null);
+    
+    // Delete the selected content using 'delete' command
     document.execCommand('delete', false, null);
     
-    // Insert the new text
+    // Insert the new text using insertText - this is key for editor compatibility
+    // insertText creates proper DOM structure that editors can work with
     const insertSuccess = document.execCommand('insertText', false, text);
     
     if (insertSuccess) {
       console.log("✅ Text replaced successfully via execCommand");
       
+      // CRITICAL: Trigger events that editors need to recognize editing state
+      // These events ensure deletion will work
+      
+      // Trigger input event
+      const inputEvent = new InputEvent('input', {
+        bubbles: true,
+        cancelable: false,
+        inputType: 'insertText',
+        data: text
+      });
+      element.dispatchEvent(inputEvent);
+      
+      // Trigger beforeinput event
+      const beforeInputEvent = new InputEvent('beforeinput', {
+        bubbles: true,
+        cancelable: true,
+        inputType: 'insertText',
+        data: text
+      });
+      element.dispatchEvent(beforeInputEvent);
+      
       // Position cursor at the end
       setTimeout(() => {
-        if (selection && element.firstChild) {
-          try {
-            const range = document.createRange();
-            const textNode = element.firstChild;
+        try {
+          const finalSelection = window.getSelection();
+          if (finalSelection && element) {
+            const finalRange = document.createRange();
             
-            if (textNode.nodeType === Node.TEXT_NODE) {
-              const len = textNode.length;
-              range.setStart(textNode, len);
-              range.collapse(true);
-            } else {
-              range.selectNodeContents(element);
-              range.collapse(false);
+            // Try to find the last text node
+            const walker = document.createTreeWalker(
+              element,
+              NodeFilter.SHOW_TEXT,
+              null
+            );
+            
+            let lastTextNode = null;
+            let node;
+            while (node = walker.nextNode()) {
+              lastTextNode = node;
             }
             
-            selection.removeAllRanges();
-            selection.addRange(range);
-          } catch (e) {
-            console.warn("Could not position cursor:", e);
+            if (lastTextNode && lastTextNode.nodeType === Node.TEXT_NODE) {
+              const len = lastTextNode.textContent?.length || 0;
+              finalRange.setStart(lastTextNode, len);
+              finalRange.setEnd(lastTextNode, len);
+            } else {
+              finalRange.selectNodeContents(element);
+              finalRange.collapse(false);
+            }
+            
+            finalSelection.removeAllRanges();
+            finalSelection.addRange(finalRange);
+            
+            // Ensure focus is maintained
+            element.focus({ preventScroll: true });
+            
+            // Trigger additional events to "wake up" the editor's deletion handlers
+            // Simulate a keypress event to ensure editor recognizes it's in edit mode
+            const keyDownEvent = new KeyboardEvent('keydown', {
+              bubbles: true,
+              cancelable: true,
+              key: 'a',
+              code: 'KeyA'
+            });
+            element.dispatchEvent(keyDownEvent);
+            
+            const keyUpEvent = new KeyboardEvent('keyup', {
+              bubbles: true,
+              cancelable: true,
+              key: 'a',
+              code: 'KeyA'
+            });
+            element.dispatchEvent(keyUpEvent);
+            
+            console.log("✅ Cursor positioned and editor events triggered");
           }
+          element.focus({ preventScroll: true });
+        } catch (e) {
+          console.warn("Could not position cursor:", e);
+          element.focus({ preventScroll: true });
         }
-        element.focus();
-      }, 10);
+      }, 30);
       
       return true;
     }
     
-    console.log("execCommand failed, trying direct manipulation...");
+    console.log("insertText command failed");
     return false;
   } catch (e) {
     console.error("replaceTextViaExecCommand failed:", e);
@@ -629,10 +792,18 @@ function replaceTextInElement(element, newText) {
     innerHTMLSnippet: element.innerHTML ? element.innerHTML.substring(0, 200) : ''
   });
   
+  // Preserve editability attributes BEFORE any manipulation
+  const wasContentEditable = element.contentEditable;
+  const originalRole = element.getAttribute('role');
+  const originalSpellcheck = element.getAttribute('spellcheck');
+  
   try {
     if (element.tagName === 'TEXTAREA') {
       // For textareas, use value
       element.value = newText;
+      // Ensure textarea remains editable
+      element.removeAttribute('readonly');
+      element.removeAttribute('disabled');
       ['input', 'change', 'keyup'].forEach(eventType => {
         const event = new Event(eventType, { bubbles: true, cancelable: true });
         element.dispatchEvent(event);
@@ -642,20 +813,152 @@ function replaceTextInElement(element, newText) {
     } else if (element.contentEditable === 'true' || element.getAttribute('role') === 'textbox') {
       element.focus?.({ preventScroll: true });
       
+      // For Twitter/X, ALWAYS use execCommand as it preserves editor functionality
+      // (including deletion support)
       if (isTwitter()) {
-        console.log("Twitter/X composer detected → using execCommand");
+        console.log("Twitter/X composer detected → using execCommand for editor compatibility");
+        
+        // Store reference to element for post-processing
+        const twitterElement = element;
+        
         const success = replaceTextViaExecCommand(element, newText);
         if (success) {
           setTimeout(() => {
             const verifyText = getTextContent(element);
             if (verifyText.trim() === newText.trim() || verifyText.includes(newText.substring(0, Math.min(newText.length, 15)))) {
               console.log("✅ Twitter composer updated successfully");
+              
+              // Ensure editability is maintained
+              if (wasContentEditable === 'true') {
+                element.contentEditable = 'true';
+                element.setAttribute('contenteditable', 'true');
+              }
+              // Restore other attributes
+              if (originalRole) {
+                element.setAttribute('role', originalRole);
+              }
+              element.removeAttribute('readonly');
+              element.removeAttribute('disabled');
+              
+              // CRITICAL: Additional event triggers to ensure deletion works
+              // Twitter's editor may need these to properly initialize deletion handlers
+              setTimeout(() => {
+                // Ensure element is still editable
+                if (wasContentEditable === 'true') {
+                  element.contentEditable = 'true';
+                  element.setAttribute('contenteditable', 'true');
+                }
+                element.removeAttribute('readonly');
+                element.removeAttribute('disabled');
+                
+                // Focus the element
+                element.focus({ preventScroll: true });
+                
+                // Trigger focus event to ensure editor recognizes focus
+                const focusEvent = new FocusEvent('focus', {
+                  bubbles: true,
+                  cancelable: true,
+                  view: window
+                });
+                element.dispatchEvent(focusEvent);
+                
+                // Ensure selection is properly set at the end
+                const sel = window.getSelection();
+                if (sel && element) {
+                  try {
+                    const range = document.createRange();
+                    const walker = document.createTreeWalker(
+                      element,
+                      NodeFilter.SHOW_TEXT,
+                      null
+                    );
+                    
+                    let lastTextNode = null;
+                    let node;
+                    while (node = walker.nextNode()) {
+                      lastTextNode = node;
+                    }
+                    
+                    if (lastTextNode) {
+                      const len = lastTextNode.textContent?.length || 0;
+                      range.setStart(lastTextNode, len);
+                      range.setEnd(lastTextNode, len);
+                    } else {
+                      range.selectNodeContents(element);
+                      range.collapse(false);
+                    }
+                    
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                  } catch (e) {
+                    console.warn("Could not set selection:", e);
+                  }
+                }
+                
+                // CRITICAL: Trigger a mock backspace keydown event (cancelled)
+                // This helps Twitter's editor recognize that deletion is enabled
+                // We cancel it so it doesn't actually delete anything
+                const backspaceDown = new KeyboardEvent('keydown', {
+                  bubbles: true,
+                  cancelable: true,
+                  key: 'Backspace',
+                  code: 'Backspace',
+                  keyCode: 8,
+                  which: 8
+                });
+                
+                // Add a listener to prevent actual deletion
+                const preventDelete = (e) => {
+                  if (e.key === 'Backspace') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }
+                };
+                element.addEventListener('keydown', preventDelete, { once: true, capture: true });
+                element.dispatchEvent(backspaceDown);
+                
+                // Also trigger keyup
+                setTimeout(() => {
+                  const backspaceUp = new KeyboardEvent('keyup', {
+                    bubbles: true,
+                    cancelable: true,
+                    key: 'Backspace',
+                    code: 'Backspace',
+                    keyCode: 8,
+                    which: 8
+                  });
+                  element.dispatchEvent(backspaceUp);
+                  
+                  // Remove the prevent listener
+                  element.removeEventListener('keydown', preventDelete, { capture: true });
+                  
+                  console.log("✅ Twitter editor deletion handlers initialized");
+                }, 10);
+              }, 100);
             } else {
-              console.warn("⚠️ Twitter composer verification mismatch", { expected: newText, got: verifyText });
+              console.warn("⚠️ Twitter composer verification mismatch, retrying...");
+              // Retry once more
+              setTimeout(() => {
+                const retrySuccess = replaceTextViaExecCommand(element, newText);
+                if (!retrySuccess) {
+                  console.error("⚠️ execCommand retry failed, Twitter editor may have compatibility issues");
+                }
+              }, 200);
             }
           }, 150);
+          return success;
+        } else {
+          // If execCommand failed, try again with a delay
+          console.log("⚠️ Initial execCommand failed, retrying...");
+          setTimeout(() => {
+            const retrySuccess = replaceTextViaExecCommand(element, newText);
+            if (retrySuccess) {
+              console.log("✅ Retry succeeded");
+            }
+          }, 100);
+          // Still return false to try other methods
+          return false;
         }
-        return success;
       }
       
       // Ensure the full content is selected before replacement
@@ -683,6 +986,10 @@ function replaceTextInElement(element, newText) {
             const verifyText = getTextContent(element);
             if (verifyText.trim() === newText.trim() || verifyText.includes(newText.substring(0, Math.min(newText.length, 15)))) {
               console.log("✅ Facebook composer updated successfully");
+              // Ensure editability is maintained
+              if (wasContentEditable === 'true') {
+                element.contentEditable = 'true';
+              }
             } else {
               console.warn("⚠️ Facebook composer verification mismatch", { expected: newText, got: verifyText });
             }
@@ -700,6 +1007,10 @@ function replaceTextInElement(element, newText) {
           const insertSuccess = document.execCommand('insertText', false, newText);
           if (insertSuccess) {
             console.log("✅ Method 1 (execCommand): Success");
+            // Ensure editability is maintained after execCommand
+            if (wasContentEditable === 'true') {
+              element.contentEditable = 'true';
+            }
             // Verify it worked
             setTimeout(() => {
               const verifyText = getTextContent(element);
@@ -710,6 +1021,10 @@ function replaceTextInElement(element, newText) {
                 // Fallback to direct DOM manipulation
                 element.textContent = newText;
                 element.innerText = newText;
+                // Restore editability in fallback
+                if (wasContentEditable === 'true') {
+                  element.contentEditable = 'true';
+                }
               }
             }, 50);
             setCaretToEnd(element);
@@ -720,76 +1035,196 @@ function replaceTextInElement(element, newText) {
         console.log("Method 1 (execCommand) failed:", e);
       }
       
-      // Method 2: Direct DOM manipulation with multiple approaches
-      console.log("Trying Method 2: Direct DOM manipulation");
+      // Method 2: Use modern InputEvent API to preserve editor functionality
+      console.log("Trying Method 2: InputEvent API for editor compatibility");
       
-      // For Facebook's lexical editor - find spans BEFORE mutating
-      const lexicalSpans = Array.from(element.querySelectorAll('span[data-text="true"], span[data-lexical-text="true"]'));
+      // For editors like Twitter/X, we should use InputEvent API which editors understand
+      // This preserves deletion and other editing capabilities
       
-      // Clear everything first
-      element.innerHTML = '';
-      element.textContent = '';
-      element.innerText = '';
-      
-      // Set new text using multiple methods
-      element.textContent = newText;
-      element.innerText = newText;
-      
-      // Also create a text node
-      const textNode = document.createTextNode(newText);
-      element.appendChild(textNode);
-      
-      // If we detected lexical spans earlier, update them directly as well
-      if (lexicalSpans.length > 0) {
-        lexicalSpans.forEach((span, index) => {
-          if (index === 0) {
-            span.textContent = newText;
-            span.innerText = newText;
-            if (span.firstChild) {
-              span.firstChild.nodeValue = newText;
-            }
-          } else {
-            span.remove();
-          }
+      try {
+        // Select all content first
+        const selectRange = document.createRange();
+        selectRange.selectNodeContents(element);
+        const sel = window.getSelection();
+        if (sel) {
+          sel.removeAllRanges();
+          sel.addRange(selectRange);
+        }
+        
+        // Use InputEvent with deleteContentBackward to remove existing text
+        // This is what browsers and editors expect
+        const deleteEvent = new InputEvent('beforeinput', {
+          bubbles: true,
+          cancelable: true,
+          inputType: 'deleteContentBackward'
         });
-      }
-      
-      // Restore caret to the end of the new text
-      if (selection) {
-        const caretRange = document.createRange();
-        caretRange.selectNodeContents(element);
-        caretRange.collapse(false);
-        selection.removeAllRanges();
-        selection.addRange(caretRange);
-      }
-      
-      // Trigger comprehensive events
-      ['beforeinput', 'input', 'keyup', 'change'].forEach(eventType => {
-        try {
-          if (eventType === 'input' || eventType === 'beforeinput') {
-            const inputEvent = new InputEvent(eventType, {
-              bubbles: true,
-              cancelable: true,
-              inputType: 'insertText',
-              data: newText
-            });
-            element.dispatchEvent(inputEvent);
-          } else {
+        element.dispatchEvent(deleteEvent);
+        
+        // Now delete the selected content
+        if (sel && sel.rangeCount > 0) {
+          sel.getRangeAt(0).deleteContents();
+        }
+        
+        // Insert new text using InputEvent with insertText
+        const insertEvent = new InputEvent('beforeinput', {
+          bubbles: true,
+          cancelable: true,
+          inputType: 'insertText',
+          data: newText
+        });
+        element.dispatchEvent(insertEvent);
+        
+        // Actually insert the text
+        if (sel) {
+          const insertRange = document.createRange();
+          insertRange.selectNodeContents(element);
+          insertRange.collapse(true); // Start at beginning
+          sel.removeAllRanges();
+          sel.addRange(insertRange);
+          
+          // Insert as text node (single node for better compatibility)
+          const textNode = document.createTextNode(newText);
+          insertRange.deleteContents();
+          insertRange.insertNode(textNode);
+          insertRange.setStartAfter(textNode);
+          insertRange.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(insertRange);
+        }
+        
+        // Trigger input event
+        const inputEvent = new InputEvent('input', {
+          bubbles: true,
+          cancelable: false,
+          inputType: 'insertText',
+          data: newText
+        });
+        element.dispatchEvent(inputEvent);
+        
+        console.log("✅ Method 2 (InputEvent API): Text inserted");
+        
+        // Restore editability attributes
+        if (wasContentEditable === 'true') {
+          element.contentEditable = 'true';
+          element.setAttribute('contenteditable', 'true');
+        }
+        if (originalRole) {
+          element.setAttribute('role', originalRole);
+        }
+        element.removeAttribute('readonly');
+        element.removeAttribute('disabled');
+        
+        // Position cursor at end
+        setTimeout(() => {
+          setCaretToEnd(element);
+        }, 10);
+        
+        return true;
+      } catch (inputEventError) {
+        console.warn("InputEvent API failed, falling back to DOM manipulation:", inputEventError);
+        
+        // Fallback: Direct DOM manipulation (less ideal but necessary)
+        // For Facebook's lexical editor - find spans BEFORE mutating
+        const lexicalSpans = Array.from(element.querySelectorAll('span[data-text="true"], span[data-lexical-text="true"]'));
+        
+        // Clear everything first
+        element.innerHTML = '';
+        element.textContent = '';
+        element.innerText = '';
+        
+        // CRITICAL: Restore contentEditable immediately after clearing
+        if (wasContentEditable === 'true') {
+          element.contentEditable = 'true';
+          element.setAttribute('contenteditable', 'true');
+        }
+        if (originalRole) {
+          element.setAttribute('role', originalRole);
+        }
+        if (originalSpellcheck) {
+          element.setAttribute('spellcheck', originalSpellcheck);
+        }
+        
+        // Remove any attributes that might prevent editing
+        element.removeAttribute('readonly');
+        element.removeAttribute('disabled');
+        
+        // Create a single text node (better for editors than multiple nodes)
+        const textNode = document.createTextNode(newText);
+        element.appendChild(textNode);
+        
+        // Set textContent as well for compatibility
+        element.textContent = newText;
+        
+        // If we detected lexical spans earlier, update them directly as well
+        if (lexicalSpans.length > 0) {
+          lexicalSpans.forEach((span, index) => {
+            if (index === 0) {
+              span.textContent = newText;
+              span.innerText = newText;
+              if (span.firstChild) {
+                span.firstChild.nodeValue = newText;
+              }
+            } else {
+              span.remove();
+            }
+          });
+        }
+        
+        // Restore caret to the end of the new text
+        if (selection) {
+          const caretRange = document.createRange();
+          caretRange.selectNodeContents(element);
+          caretRange.collapse(false);
+          selection.removeAllRanges();
+          selection.addRange(caretRange);
+        }
+        
+        // Trigger comprehensive events
+        ['beforeinput', 'input', 'keyup', 'change'].forEach(eventType => {
+          try {
+            if (eventType === 'input' || eventType === 'beforeinput') {
+              const inputEvent = new InputEvent(eventType, {
+                bubbles: true,
+                cancelable: true,
+                inputType: 'insertText',
+                data: newText
+              });
+              element.dispatchEvent(inputEvent);
+            } else {
+              const event = new Event(eventType, { bubbles: true, cancelable: true });
+              element.dispatchEvent(event);
+            }
+          } catch (e) {
             const event = new Event(eventType, { bubbles: true, cancelable: true });
             element.dispatchEvent(event);
           }
-        } catch (e) {
-          const event = new Event(eventType, { bubbles: true, cancelable: true });
-          element.dispatchEvent(event);
+        });
+        
+        // Final safeguard: ensure editability before returning
+        if (wasContentEditable === 'true') {
+          element.contentEditable = 'true';
+          element.setAttribute('contenteditable', 'true');
         }
-      });
+        element.removeAttribute('readonly');
+        element.removeAttribute('disabled');
+        
+        setCaretToEnd(element);
+      }
       
-      // Method 3: Verification and fallback
+      // Method 3: Verification and fallback (after both Method 2 attempts)
       setTimeout(() => {
         const verifyText = getTextContent(element);
         if (verifyText.trim() !== newText.trim() && !verifyText.includes(newText.substring(0, 15))) {
           console.log("Method 2 failed, attempting final fallback with events");
           element.textContent = newText;
+          
+          // Ensure editability is maintained in fallback
+          if (wasContentEditable === 'true') {
+            element.contentEditable = 'true';
+            element.setAttribute('contenteditable', 'true');
+          }
+          element.removeAttribute('readonly');
+          element.removeAttribute('disabled');
           
           // Dispatch comprehensive events
           ['input', 'change', 'keyup'].forEach(eventType => {
@@ -799,13 +1234,42 @@ function replaceTextInElement(element, newText) {
           
           setCaretToEnd(element);
         }
+        
+        // Final verification: ensure element is still editable
+        const isStillEditable = element.contentEditable === 'true' || 
+                                element.getAttribute('role') === 'textbox' ||
+                                element.tagName === 'TEXTAREA';
+        
+        if (!isStillEditable && wasContentEditable === 'true') {
+          console.warn("⚠️ Element lost editability, restoring...");
+          element.contentEditable = 'true';
+          element.setAttribute('contenteditable', 'true');
+          if (originalRole) {
+            element.setAttribute('role', originalRole);
+          }
+        }
       }, 100);
+      
+      // Final safeguard: ensure editability before returning
+      if (wasContentEditable === 'true') {
+        element.contentEditable = 'true';
+        element.setAttribute('contenteditable', 'true');
+      }
+      element.removeAttribute('readonly');
+      element.removeAttribute('disabled');
       
       setCaretToEnd(element);
       return true;
     } else {
       // Fallback
       element.textContent = newText;
+      // Ensure editability in fallback
+      if (wasContentEditable === 'true') {
+        element.contentEditable = 'true';
+        element.setAttribute('contenteditable', 'true');
+      }
+      element.removeAttribute('readonly');
+      element.removeAttribute('disabled');
       const event = new Event('input', { bubbles: true });
       element.dispatchEvent(event);
       setCaretToEnd(element);
@@ -813,6 +1277,13 @@ function replaceTextInElement(element, newText) {
     }
   } catch (error) {
     console.error("Error replacing text:", error);
+    // Even on error, try to restore editability
+    if (wasContentEditable === 'true') {
+      element.contentEditable = 'true';
+      element.setAttribute('contenteditable', 'true');
+    }
+    element.removeAttribute('readonly');
+    element.removeAttribute('disabled');
     return false;
   }
 }
@@ -899,6 +1370,18 @@ function createEscalationTooltip(originalText, element, escalationType = 'unknow
     console.log("Original:", originalText);
     console.log("Rephrased:", rephrasedText);
     
+    // Store element reference and editability state BEFORE any changes
+    const elementToRephrase = targetElement;
+    if (!elementToRephrase) {
+      console.error("❌ No target element found for rephrasing");
+      tooltip.remove();
+      return;
+    }
+    
+    // Preserve original editability state
+    const originalContentEditable = elementToRephrase.contentEditable;
+    const originalRole = elementToRephrase.getAttribute('role');
+    
     // Set flag to prevent immediate re-detection
     justRephrased = true;
     
@@ -907,74 +1390,195 @@ function createEscalationTooltip(originalText, element, escalationType = 'unknow
       clearTimeout(rephraseTimeout);
     }
     
-    if (targetElement) {
-      const success = replaceTextInElement(targetElement, rephrasedText);
-      if (success) {
-        // Verify the text was actually replaced and re-enable editing
-        setTimeout(() => {
-          const verifyText = getTextContent(targetElement);
-          const wasReplaced = verifyText.trim() === rephrasedText.trim() || 
-                             verifyText.includes(rephrasedText.substring(0, 15));
+    // Remove tooltip FIRST to prevent focus issues, but use requestAnimationFrame
+    // to ensure it happens after current event
+    requestAnimationFrame(() => {
+      tooltip.remove();
+    });
+    
+    const success = replaceTextInElement(elementToRephrase, rephrasedText);
+    
+    // IMMEDIATELY ensure editability - don't wait
+    function forceEditability() {
+      if (!elementToRephrase) return;
+      
+      // Force contentEditable
+      if (elementToRephrase.tagName !== 'TEXTAREA') {
+        elementToRephrase.contentEditable = 'true';
+        elementToRephrase.setAttribute('contenteditable', 'true');
+      }
+      
+      // Restore role if it existed
+      if (originalRole) {
+        elementToRephrase.setAttribute('role', originalRole);
+      }
+      
+      // Remove blocking attributes
+      elementToRephrase.removeAttribute('readonly');
+      elementToRephrase.removeAttribute('disabled');
+      
+      // Ensure it's focusable
+      if (elementToRephrase.tabIndex === -1) {
+        elementToRephrase.tabIndex = 0;
+      }
+    }
+    
+    // Apply immediately and multiple times to be sure
+    forceEditability();
+    
+    if (success) {
+      // Verify the text was actually replaced and re-enable editing
+      setTimeout(() => {
+        const verifyText = getTextContent(elementToRephrase);
+        const wasReplaced = verifyText.trim() === rephrasedText.trim() || 
+                           verifyText.includes(rephrasedText.substring(0, 15));
+        
+        if (wasReplaced) {
+          console.log("✅ Text successfully rephrased! New text:", verifyText);
           
-          if (wasReplaced) {
-            console.log("✅ Text successfully rephrased! New text:", verifyText);
+          // Log that user accepted the suggestion
+          logInteraction({
+            usersOriginalContent: originalText,
+            rephraseSuggestion: rephrasedText,
+            didUserAccept: 'yes',
+            escalationType
+          });
+          
+          // Force editability again after text replacement
+          forceEditability();
+          
+          // Ensure editability and focus for immediate editing - use multiple timeouts
+          // to combat platform interference
+          setTimeout(() => {
+            forceEditability();
             
-            // Log that user accepted the suggestion
-            logInteraction({
-              usersOriginalContent: originalText,
-              rephraseSuggestion: rephrasedText,
-              didUserAccept: 'yes',
-              escalationType
-            });
+            // Focus the element aggressively
+            elementToRephrase.focus({ preventScroll: true });
             
-            // Simple focus to ensure editability - don't over-complicate
-            setTimeout(() => {
-              targetElement.focus();
+            // Use requestAnimationFrame for better timing
+            requestAnimationFrame(() => {
+              forceEditability();
+              elementToRephrase.focus({ preventScroll: true });
               
               // Place cursor at end
               const selection = window.getSelection();
-              if (selection && targetElement.firstChild) {
+              if (selection) {
                 const range = document.createRange();
                 try {
-                  const textNode = targetElement.firstChild;
-                  if (textNode.nodeType === Node.TEXT_NODE) {
+                  // Try to find a text node
+                  let textNode = elementToRephrase.firstChild;
+                  
+                  // If no direct text node, find one in the content
+                  if (!textNode || textNode.nodeType !== Node.TEXT_NODE) {
+                    const walker = document.createTreeWalker(
+                      elementToRephrase,
+                      NodeFilter.SHOW_TEXT,
+                      null
+                    );
+                    textNode = walker.nextNode();
+                  }
+                  
+                  if (textNode && textNode.nodeType === Node.TEXT_NODE) {
                     const len = textNode.textContent?.length || 0;
                     range.setStart(textNode, len);
                     range.setEnd(textNode, len);
                   } else {
-                    range.selectNodeContents(targetElement);
+                    // Fallback: select all and collapse to end
+                    range.selectNodeContents(elementToRephrase);
                     range.collapse(false);
                   }
+                  
                   selection.removeAllRanges();
                   selection.addRange(range);
+                  
+                  // Verify we can still type
+                  console.log("✅ Element ready for editing:", {
+                    contentEditable: elementToRephrase.contentEditable,
+                    role: elementToRephrase.getAttribute('role'),
+                    hasSelection: selection.rangeCount > 0,
+                    isContentEditable: elementToRephrase.isContentEditable
+                  });
                 } catch (e) {
                   console.warn("Could not set cursor:", e);
+                  // At minimum, ensure focus
+                  forceEditability();
+                  elementToRephrase.focus({ preventScroll: true });
                 }
+              } else {
+                // Fallback: just focus
+                forceEditability();
+                elementToRephrase.focus({ preventScroll: true });
               }
-            }, 100);
-          } else {
-            console.error("❌ Text replacement failed! Expected:", rephrasedText, "Got:", verifyText);
-            justRephrased = false; // Reset flag if replacement failed
-          }
+              
+              // Final check - ensure it's still editable after a brief moment
+              setTimeout(() => {
+                forceEditability();
+                if (document.activeElement !== elementToRephrase) {
+                  elementToRephrase.focus({ preventScroll: true });
+                }
+              }, 50);
+            });
+          }, 50);
           
-          // Reset flag after 2 seconds to allow future checks (only if replacement succeeded)
-          if (wasReplaced) {
-            rephraseTimeout = setTimeout(() => {
-              justRephrased = false;
-              console.log("🔄 Re-enabled escalation detection");
-            }, 2000);
-          }
-        }, 250); // Slightly increased timeout for better reliability
-      } else {
-        console.error("❌ Failed to replace text");
-        justRephrased = false; // Reset if failed
-      }
+          // Also check after a longer delay to catch platform re-initialization
+          setTimeout(() => {
+            forceEditability();
+            if (document.activeElement !== elementToRephrase && elementToRephrase.isConnected) {
+              elementToRephrase.focus({ preventScroll: true });
+            }
+          }, 300);
+          
+          // Set up a watchdog to continuously ensure editability for 3 seconds
+          // This catches cases where the platform re-initializes the editor
+          let editabilityWatchdogCount = 0;
+          const maxWatchdogChecks = 30; // 3 seconds at 100ms intervals
+          const editabilityWatchdog = setInterval(() => {
+            if (!elementToRephrase || !elementToRephrase.isConnected) {
+              clearInterval(editabilityWatchdog);
+              return;
+            }
+            
+            editabilityWatchdogCount++;
+            
+            // Check if element is still editable
+            const isCurrentlyEditable = elementToRephrase.contentEditable === 'true' || 
+                                       elementToRephrase.getAttribute('role') === 'textbox' ||
+                                       elementToRephrase.tagName === 'TEXTAREA';
+            
+            if (!isCurrentlyEditable) {
+              console.log("⚠️ Watchdog detected lost editability, restoring...");
+              forceEditability();
+            }
+            
+            // Check for readonly/disabled attributes
+            if (elementToRephrase.hasAttribute('readonly') || elementToRephrase.hasAttribute('disabled')) {
+              elementToRephrase.removeAttribute('readonly');
+              elementToRephrase.removeAttribute('disabled');
+            }
+            
+            // Stop after max checks
+            if (editabilityWatchdogCount >= maxWatchdogChecks) {
+              clearInterval(editabilityWatchdog);
+              console.log("✅ Editability watchdog completed");
+            }
+          }, 100);
+        } else {
+          console.error("❌ Text replacement failed! Expected:", rephrasedText, "Got:", verifyText);
+          justRephrased = false; // Reset flag if replacement failed
+        }
+        
+        // Reset flag after 2 seconds to allow future checks (only if replacement succeeded)
+        if (wasReplaced) {
+          rephraseTimeout = setTimeout(() => {
+            justRephrased = false;
+            console.log("🔄 Re-enabled escalation detection");
+          }, 2000);
+        }
+      }, 100); // Reduced timeout for faster response
     } else {
-      console.error("❌ No target element found for rephrasing");
-      justRephrased = false; // Reset if no element
+      console.error("❌ Failed to replace text");
+      justRephrased = false; // Reset if failed
     }
-    
-    tooltip.remove();
   };
 }
 
