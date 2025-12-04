@@ -189,6 +189,8 @@ function hasHighRiskKeywords(text) {
   const keywordList = [
     "you're wrong",
     "you are wrong",
+    "are wrong", // Catch "those people are wrong", "they are wrong"
+    "always wrong",
     "your fault",
     "it's your fault",
     "you idiot",
@@ -204,7 +206,12 @@ function hasHighRiskKeywords(text) {
     "stupid",
     "idiot",
     "hate",
-    "disgusting"
+    "disgusting",
+    "ridiculous",
+    "brainwashed",
+    "never work",
+    "will never",
+    "anyone who supports"
   ];
   return keywordList.some((kw) => lowercase.includes(kw));
 }
@@ -228,11 +235,15 @@ function isEscalating(text) {
     /\b(you are wrong|you're wrong)\b/i,
     /\b(you are (?:always|never|totally|completely|absolutely|so|just) wrong)\b/i, // "you are [adverb] wrong"
     /\b(you're (?:always|never|totally|completely|absolutely|so|just) wrong)\b/i,
+    /\b(?:are|is) (?:always|never|totally|completely|absolutely) wrong\b/i, // General "are always wrong"
     /\b(i am right|i'm right)\b/i,
     /\b(i totally disagree|completely disagree|absolutely wrong)\b/i,
     /\b(that's not true|that is not true|that's false)\b/i,
     /\b(you don't understand|you don't get it)\b/i,
-    /\b(that's ridiculous|that's absurd|that's stupid)\b/i
+    /\b(that's ridiculous|that's absurd|that's stupid)\b/i,
+    /\b(?:their|his|her) (?:ridiculous|absurd|stupid|idiotic) (?:ideas?|views?|opinions?)\b/i, // "their ridiculous ideas"
+    /\bwill never work\b/i, // Absolute dismissal
+    /\bwill always (?:fail|lose|be wrong)\b/i
   ];
   
   absoluteTruthPatterns.forEach(pattern => {
@@ -247,7 +258,9 @@ function isEscalating(text) {
     /\b(the (?:arabs|palestinians|jews|israelis|leftists|rightists|republicans|democrats|liberals|conservatives))\b/i,
     /\b(all (?:arabs|palestinians|jews|israelis|leftists|rightists|republicans|democrats|liberals|conservatives|of them|of you))\b/i,
     /\b(every (?:arab|palestinian|jew|israeli|leftist|rightist|republican|democrat|liberal|conservative))\b/i,
-    /\b(they all|you all|all of you|all of them)\b/i
+    /\b(they all|you all|all of you|all of them)\b/i,
+    /\b(?:those|these) (?:people|guys|folks) (?:on the (?:other side|left|right))\b/i, // "those people on the other side"
+    /\b(?:anyone|everyone|everybody) who (?:supports?|believes?|thinks?|agrees?)\b/i // "anyone who supports"
   ];
   
   generalizedPatterns.forEach(pattern => {
@@ -338,7 +351,9 @@ function isEscalating(text) {
     /\b(you're (?:terrible|awful|horrible|disgusting|pathetic|ridiculous))\b/i,
     /\b(that's (?:terrible|awful|horrible|disgusting|pathetic|ridiculous|stupid|dumb|idiotic))\b/i,
     /\b(how (?:dare|could) you)\b/i,
-    /\b(you should (?:be ashamed|feel bad|know better))\b/i
+    /\b(you should (?:be ashamed|feel bad|know better))\b/i,
+    /\b(?:is|are|was|were) (?:brainwashed|indoctrinated|deluded|insane|crazy)\b/i, // "is brainwashed", "are brainwashed"
+    /\b(?:anyone|everyone) who (?:supports?|believes?|agrees?) (?:them|this|that) is (?:brainwashed|deluded|insane|crazy|stupid|an idiot)\b/i // "anyone who supports them is brainwashed"
   ];
   
   judgingPatterns.forEach(pattern => {
@@ -509,34 +524,146 @@ let rephraseTimeout = null;
 
 function checkForEscalation(element) {
   const text = getTextContent(element);
+  
+  console.log("🔍 checkForEscalation called - text length:", text?.length || 0);
+  
   if (!text || text.trim().length === 0) {
+    console.log("⚠️ No text to check (empty)");
     return; // Don't check empty text
   }
   
   // Skip check if we just rephrased (give it a moment)
   if (justRephrased) {
+    console.log("⚠️ Skipping check - just rephrased flag is set");
     return;
   }
   
   // Store reference for rephrasing
   currentElementBeingChecked = element;
   
-  // Debug: log what we're checking (only for longer text to avoid spam)
-  if (text.length > 10) {
-    console.log("🔍 Checking text:", text.substring(0, 50) + (text.length > 50 ? '...' : ''));
-  }
+  // ALWAYS log what we're checking for debugging
+  console.log("🔍 Checking text:", text.substring(0, 100) + (text.length > 100 ? '...' : ''));
+  console.log("📏 Text length:", text.length);
   
   const escalationResult = isEscalating(text);
+  
+  console.log("📊 Escalation result:", {
+    isEscalatory: escalationResult.isEscalatory,
+    escalationType: escalationResult.escalationType,
+    reasons: escalationResult.reasons
+  });
   
   if (escalationResult.isEscalatory) {
     console.log("🚨 Escalation detected - showing warning tooltip");
     createEscalationTooltip(text, element, escalationResult.escalationType);
   } else {
+    console.log("✅ No escalation detected");
     const existingTooltip = document.querySelector(".escalation-tooltip");
     if (existingTooltip) {
       existingTooltip.remove();
     }
     justRephrased = false;
+  }
+}
+
+/**
+ * Call OpenAI API to rephrase text using ECPM prompt
+ */
+async function rephraseViaAPI(text) {
+  try {
+    // Check if API is enabled and config is available
+    if (typeof USE_API === 'undefined' || !USE_API) {
+      console.log('⚠️ API is disabled, using fallback rephrasing');
+      return null;
+    }
+    
+    if (typeof API_CONFIG === 'undefined' || typeof ECPM_PROMPT === 'undefined') {
+      console.error('❌ API_CONFIG or ECPM_PROMPT not found in config.js');
+      return null;
+    }
+    
+    // Replace ALL {TEXT} placeholders in prompt with actual text
+    // Using replaceAll to handle multiple occurrences
+    const prompt = ECPM_PROMPT.replace(/\{TEXT\}/g, text);
+    
+    // Prepare API request
+    const requestBody = {
+      model: API_CONFIG.model || 'gpt-4',
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: API_CONFIG.temperature || 1.0,
+      max_tokens: API_CONFIG.max_tokens || 2048,
+      top_p: API_CONFIG.top_p || 1.0
+    };
+    
+    // Add response_format if specified (only if it's json_object)
+    // For 'text' mode, we don't send this parameter at all
+    if (API_CONFIG.response_format && API_CONFIG.response_format === 'json_object') {
+      requestBody.response_format = { type: 'json_object' };
+    }
+    
+    console.log('🤖 Calling OpenAI API for rephrasing...');
+    console.log('📝 Model:', API_CONFIG.model);
+    console.log('📝 Parameters:', {
+      temperature: requestBody.temperature,
+      max_tokens: requestBody.max_tokens,
+      top_p: requestBody.top_p,
+      response_format: requestBody.response_format
+    });
+    console.log('📝 Prompt preview:', prompt.substring(0, 200) + '...');
+    
+    // Call OpenAI API
+    const response = await fetch(`${API_CONFIG.baseURL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${API_CONFIG.apiKey}`
+      },
+      body: JSON.stringify(requestBody)
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ API Error:', response.status, errorText);
+      return null;
+    }
+    
+    const data = await response.json();
+    
+    // Extract the response content
+    let responseText = data.choices[0]?.message?.content || '';
+    
+    // If response_format is 'text', we need to parse JSON from the text response
+    // The prompt asks for JSON output, so we need to parse it
+    if (responseText) {
+      try {
+        // Try to extract JSON from the response
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (parsed.rephrasedText) {
+            console.log('✅ API rephrasing successful:', parsed.rephrasedText);
+            return parsed.rephrasedText;
+          }
+        }
+        
+        // If no JSON structure, return the text as-is
+        console.log('✅ API rephrasing successful (plain text)');
+        return responseText.trim();
+      } catch (parseError) {
+        console.warn('⚠️ Could not parse JSON from API response, using raw text');
+        return responseText.trim();
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('❌ Error calling OpenAI API:', error);
+    return null;
   }
 }
 
@@ -547,8 +674,21 @@ function checkForEscalation(element) {
  * 3. Replace blame statements with self-accountability
  * 4. Replace generalized statements with specific, personal ones
  * 5. Replace judging language with feelings and observations
+ * 
+ * If USE_API is true, this will call the OpenAI API. Otherwise, uses pattern matching.
  */
-function rephraseForDeEscalation(text) {
+async function rephraseForDeEscalation(text) {
+  // Try API first if enabled
+  if (typeof USE_API !== 'undefined' && USE_API) {
+    const apiResult = await rephraseViaAPI(text);
+    if (apiResult) {
+      return apiResult;
+    }
+    // Fallback to pattern matching if API fails
+    console.log('⚠️ API rephrasing failed, falling back to pattern matching');
+  }
+  
+  // Fallback: Pattern matching rephrasing (original implementation)
   let rephrased = text;
   
   // STEP 1: Deep transformations - "you are X" → "I feel/think/observe..."
@@ -651,41 +791,60 @@ function rephraseForDeEscalation(text) {
 // Replace text using the most reliable method for each platform
 // Uses execCommand which preserves editor functionality (including deletion)
 function replaceTextViaExecCommand(element, text) {
-  if (!element) return false;
+  console.log("🔧 replaceTextViaExecCommand called with:", {
+    elementTag: element?.tagName,
+    textLength: text?.length,
+    textPreview: text?.substring(0, 50)
+  });
+  
+  if (!element) {
+    console.error("❌ No element provided to replaceTextViaExecCommand");
+    return false;
+  }
   
   // Ensure element is focused and editable
   element.focus({ preventScroll: true });
+  console.log("📍 Element focused");
   
   try {
     const selection = window.getSelection();
-    if (!selection) return false;
+    if (!selection) {
+      console.error("❌ No selection object available");
+      return false;
+    }
     
     // Clear any existing selection first
     selection.removeAllRanges();
+    console.log("📍 Selection cleared");
     
     // Select all content in the element
     const range = document.createRange();
     try {
       range.selectNodeContents(element);
       selection.addRange(range);
+      console.log("📍 Selection range created and added");
     } catch (e) {
-      console.warn("Could not select node contents:", e);
+      console.warn("❌ Could not select node contents:", e);
       return false;
     }
     
     // Use execCommand to replace - this preserves editor structure
     // First, select all (redundant but helps ensure selection)
-    document.execCommand('selectAll', false, null);
+    const selectAllSuccess = document.execCommand('selectAll', false, null);
+    console.log("📍 execCommand('selectAll'):", selectAllSuccess);
     
     // Delete the selected content using 'delete' command
-    document.execCommand('delete', false, null);
+    const deleteSuccess = document.execCommand('delete', false, null);
+    console.log("📍 execCommand('delete'):", deleteSuccess);
     
     // Insert the new text using insertText - this is key for editor compatibility
     // insertText creates proper DOM structure that editors can work with
     const insertSuccess = document.execCommand('insertText', false, text);
+    console.log("📍 execCommand('insertText'):", insertSuccess);
     
     if (insertSuccess) {
       console.log("✅ Text replaced successfully via execCommand");
+      console.log("📍 Verification: element now contains:", getTextContent(element).substring(0, 50));
       
       // CRITICAL: Trigger events that editors need to recognize editing state
       // These events ensure deletion will work
@@ -817,11 +976,15 @@ function replaceTextInElement(element, newText) {
       // (including deletion support)
       if (isTwitter()) {
         console.log("Twitter/X composer detected → using execCommand for editor compatibility");
+        console.log("🔍 Current text in element:", getTextContent(element).substring(0, 50));
+        console.log("🔍 New text to insert:", newText.substring(0, 50));
         
         // Store reference to element for post-processing
         const twitterElement = element;
         
         const success = replaceTextViaExecCommand(element, newText);
+        
+        console.log("🔍 replaceTextViaExecCommand returned:", success);
         if (success) {
           setTimeout(() => {
             const verifyText = getTextContent(element);
@@ -1288,14 +1451,11 @@ function replaceTextInElement(element, newText) {
   }
 }
 
-function createEscalationTooltip(originalText, element, escalationType = 'unknown') {
+async function createEscalationTooltip(originalText, element, escalationType = 'unknown') {
   // Remove if already shown
   const existing = document.querySelector(".escalation-tooltip");
   if (existing) existing.remove();
 
-  // Generate rephrased version
-  const rephrasedText = rephraseForDeEscalation(originalText);
-  
   // Store the element reference - use the one passed in, or try to find it
   let targetElement = element;
   
@@ -1333,6 +1493,7 @@ function createEscalationTooltip(originalText, element, escalationType = 'unknow
     currentText: targetElement ? getTextContent(targetElement).substring(0, 50) : 'none'
   });
   
+  // Show tooltip with loading state first
   const tooltip = document.createElement("div");
   tooltip.className = "escalation-tooltip";
   tooltip.innerHTML = `
@@ -1341,16 +1502,42 @@ function createEscalationTooltip(originalText, element, escalationType = 'unknow
         <p class="tooltip-message">This comment/post has a high chance of escalating the conversation.</p>
         <div class="tooltip-suggestion">
           <p class="tooltip-suggestion-label">Consider rephrasing:</p>
-          <p class="tooltip-suggestion-text">"${rephrasedText}"</p>
+          <p class="tooltip-suggestion-text">⏳ Generating rephrasing suggestion...</p>
         </div>
         <div class="tooltip-buttons">
           <button id="dismissBtn" class="tooltip-btn dismiss-btn">Dismiss</button>
-          <button id="rephraseBtn" class="tooltip-btn rephrase-btn">Rephrase</button>
+          <button id="rephraseBtn" class="tooltip-btn rephrase-btn" disabled>Rephrase</button>
         </div>
       </div>
     </div>
   `;
   document.body.appendChild(tooltip);
+
+  // Generate rephrased version (async - may call API)
+  let rephrasedText;
+  try {
+    rephrasedText = await rephraseForDeEscalation(originalText);
+  } catch (error) {
+    console.error('❌ Error during rephrasing:', error);
+    // Fallback to pattern matching on error
+    rephrasedText = await rephraseForDeEscalation(originalText);
+  }
+  
+  // Update tooltip with the rephrased text
+  const suggestionText = tooltip.querySelector('.tooltip-suggestion-text');
+  const rephraseBtn = document.getElementById('rephraseBtn');
+  if (suggestionText && rephrasedText) {
+    suggestionText.textContent = `"${rephrasedText}"`;
+    if (rephraseBtn) {
+      rephraseBtn.disabled = false;
+    }
+  } else {
+    // If rephrasing failed, show fallback
+    suggestionText.textContent = '"Error generating rephrasing. Please try again."';
+    if (rephraseBtn) {
+      rephraseBtn.disabled = true;
+    }
+  }
 
   // Add event listeners for buttons
   document.getElementById("dismissBtn").onclick = () => {
@@ -1396,7 +1583,16 @@ function createEscalationTooltip(originalText, element, escalationType = 'unknow
       tooltip.remove();
     });
     
+    console.log("🔄 About to replace text in element:", {
+      elementTag: elementToRephrase.tagName,
+      elementContentEditable: elementToRephrase.contentEditable,
+      currentText: getTextContent(elementToRephrase).substring(0, 50),
+      newText: rephrasedText.substring(0, 50)
+    });
+    
     const success = replaceTextInElement(elementToRephrase, rephrasedText);
+    
+    console.log("🔄 replaceTextInElement returned:", success);
     
     // IMMEDIATELY ensure editability - don't wait
     function forceEditability() {
@@ -1626,8 +1822,16 @@ function attachListeners(element) {
     contenteditable: element.contentEditable,
     role: element.getAttribute('role'),
     ariaLabel: element.getAttribute('aria-label')?.substring(0, 50),
-    className: element.className?.substring(0, 50)
+    className: element.className?.substring(0, 50),
+    currentText: getTextContent(element).substring(0, 30)
   });
+  
+  // Immediate check for existing text
+  const existingText = getTextContent(element);
+  if (existingText && existingText.length > 10) {
+    console.log("🔍 Checking existing text immediately:", existingText.substring(0, 50));
+    checkForEscalation(element);
+  }
 }
 
 // Find all potential text input elements (contenteditable, textareas, role="textbox")
@@ -1663,6 +1867,9 @@ function initializeObserver() {
   }
 
   console.log("🔍 Initializing escalation detector...");
+  console.log("✅ Extension loaded successfully");
+  console.log("⚙️ USE_API:", typeof USE_API !== 'undefined' ? USE_API : 'undefined');
+  console.log("⚙️ API_CONFIG.model:", typeof API_CONFIG !== 'undefined' ? API_CONFIG.model : 'undefined');
 
   // MutationObserver for dynamic content (like Facebook's post composer)
   const observer = new MutationObserver(() => {
