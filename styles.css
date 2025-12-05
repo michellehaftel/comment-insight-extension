@@ -118,6 +118,19 @@
   }
 }
 
+/* Success tooltip styles */
+.success-content {
+  background: linear-gradient(135deg, #B880FF 0%, #9d5fdf 100%);
+  border: none;
+}
+
+.success-message {
+  color: white;
+  text-align: center;
+  margin: 0;
+  font-weight: 600;
+}
+
 /* Responsive design */
 @media (max-width: 480px) {
   .escalation-tooltip {

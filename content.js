@@ -1451,6 +1451,71 @@ function replaceTextInElement(element, newText) {
   }
 }
 
+/**
+ * Show a "Good job!" success tooltip after rephrasing
+ */
+function showSuccessTooltip(element) {
+  // Remove any existing tooltip first
+  const existingTooltip = document.querySelector(".escalation-tooltip");
+  if (existingTooltip) {
+    existingTooltip.remove();
+  }
+  
+  const successTooltip = document.createElement("div");
+  successTooltip.className = "escalation-tooltip success-tooltip";
+  successTooltip.innerHTML = `
+    <div class="tooltip-container">
+      <div class="tooltip-content success-content">
+        <p class="tooltip-message success-message">✨ Good job! Your message has been de-escalated.</p>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(successTooltip);
+  
+  // Position tooltip near the element
+  if (element) {
+    const rect = element.getBoundingClientRect();
+    const tooltipRect = successTooltip.getBoundingClientRect();
+    
+    // Position below the element with some spacing
+    let top = rect.bottom + window.scrollY + 10;
+    let left = rect.left + window.scrollX;
+    
+    // Ensure tooltip doesn't go off-screen
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    // Adjust horizontal position if tooltip goes off right edge
+    if (left + tooltipRect.width > viewportWidth) {
+      left = viewportWidth - tooltipRect.width - 20;
+    }
+    
+    // If tooltip goes below viewport, position it above the element instead
+    if (top + tooltipRect.height > viewportHeight + window.scrollY) {
+      top = rect.top + window.scrollY - tooltipRect.height - 10;
+    }
+    
+    // Ensure minimum left position
+    if (left < 10) {
+      left = 10;
+    }
+    
+    successTooltip.style.top = `${top}px`;
+    successTooltip.style.left = `${left}px`;
+  }
+  
+  // Auto-dismiss after 2.5 seconds
+  setTimeout(() => {
+    if (successTooltip && successTooltip.parentNode) {
+      successTooltip.style.opacity = '0';
+      successTooltip.style.transition = 'opacity 0.3s ease-out';
+      setTimeout(() => {
+        successTooltip.remove();
+      }, 300);
+    }
+  }, 2500);
+}
+
 async function createEscalationTooltip(originalText, element, escalationType = 'unknown') {
   // Remove if already shown
   const existing = document.querySelector(".escalation-tooltip");
@@ -1609,11 +1674,8 @@ async function createEscalationTooltip(originalText, element, escalationType = '
       clearTimeout(rephraseTimeout);
     }
     
-    // Remove tooltip FIRST to prevent focus issues, but use requestAnimationFrame
-    // to ensure it happens after current event
-    requestAnimationFrame(() => {
-      tooltip.remove();
-    });
+    // Remove original tooltip immediately
+    tooltip.remove();
     
     console.log("🔄 About to replace text in element:", {
       elementTag: elementToRephrase.tagName,
@@ -1671,6 +1733,9 @@ async function createEscalationTooltip(originalText, element, escalationType = '
             didUserAccept: 'yes',
             escalationType
           });
+          
+          // Show "Good job!" tooltip
+          showSuccessTooltip(elementToRephrase);
           
           // Force editability again after text replacement
           forceEditability();
