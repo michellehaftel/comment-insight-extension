@@ -582,6 +582,20 @@ async function rephraseViaAPI(text) {
       return null;
     }
     
+    // Get API key from Chrome storage (users configure it in popup)
+    let apiKey = '';
+    try {
+      const storage = await chrome.storage.local.get(['openaiApiKey']);
+      apiKey = storage.openaiApiKey || '';
+    } catch (e) {
+      console.error('❌ Error loading API key from storage:', e);
+    }
+    
+    if (!apiKey || apiKey.trim() === '') {
+      console.log('⚠️ No API key configured. Please add your OpenAI API key in the extension popup.');
+      return null;
+    }
+    
     // Replace ALL {TEXT} placeholders in prompt with actual text
     // Using replaceAll to handle multiple occurrences
     const prompt = ECPM_PROMPT.replace(/\{TEXT\}/g, text);
@@ -621,7 +635,7 @@ async function rephraseViaAPI(text) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_CONFIG.apiKey}`
+        'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify(requestBody)
     });

@@ -24,10 +24,29 @@ When escalating language is detected, it transforms:
 
 ## 📦 Installation
 
-### Option 1: Install from Chrome Web Store (Coming Soon)
-*The extension will be available on the Chrome Web Store soon.*
+### 🚀 Easy Installation (For Everyone)
 
-### Option 2: Install Manually (Developer Mode)
+**👉 [Click here to install](install.html)** - Simple step-by-step guide with download link!
+
+Or follow these steps:
+
+1. **Download the Extension**
+   - Download `de-escalator-extension-v1.1.zip` from this repository
+   - Extract the ZIP file to a folder on your computer
+
+2. **Open Chrome Extensions Page**
+   - Go to `chrome://extensions/` in your Chrome browser
+   - Or click the three dots menu → More Tools → Extensions
+
+3. **Enable Developer Mode**
+   - Toggle "Developer mode" in the top-right corner
+
+4. **Load the Extension**
+   - Click "Load unpacked"
+   - Select the **extracted folder** (the folder containing `manifest.json`)
+   - The De-Escalator icon should appear in your extensions toolbar
+
+### Option 2: Install from Source (Developer Mode)
 
 1. **Download the Extension**
    - Download this repository as a ZIP file and extract it

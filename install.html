@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Install De-Escalator Extension</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 600px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 32px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 16px;
+        }
+        
+        .download-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 18px 40px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-size: 18px;
+            font-weight: 600;
+            text-align: center;
+            margin: 20px 0;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .download-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+        }
+        
+        .download-button:active {
+            transform: translateY(0);
+        }
+        
+        .steps {
+            margin-top: 40px;
+        }
+        
+        .step {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 25px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 12px;
+        }
+        
+        .step-number {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+        
+        .step-content h3 {
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 18px;
+        }
+        
+        .step-content p {
+            color: #666;
+            line-height: 1.6;
+            font-size: 14px;
+        }
+        
+        .step-content code {
+            background: #e9ecef;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: #d63384;
+        }
+        
+        .highlight {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #ffc107;
+            margin: 20px 0;
+        }
+        
+        .highlight p {
+            color: #856404;
+            margin: 0;
+            font-size: 14px;
+        }
+        
+        .icon {
+            text-align: center;
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">🕊️</div>
+        <h1>Install De-Escalator</h1>
+        <p class="subtitle">Help create more peaceful online conversations</p>
+        
+        <div style="text-align: center;">
+            <a href="https://github.com/michellehaftel/comment-insight-extension/releases/download/v1.1/de-escalator-store-v1.1.zip" class="download-button">
+                📥 Download Extension
+            </a>
+            <p style="font-size: 12px; color: #888; margin-top: 10px;">
+                Version 1.1 • <a href="https://github.com/michellehaftel/comment-insight-extension/releases" target="_blank" style="color: #667eea;">View all releases</a>
+            </p>
+        </div>
+        
+        <div class="highlight">
+            <p><strong>⏱️ Takes less than 2 minutes!</strong> Just follow the 3 simple steps below.</p>
+        </div>
+        
+        <div class="steps">
+            <div class="step">
+                <div class="step-number">1</div>
+                <div class="step-content">
+                    <h3>Click the Download Button</h3>
+                    <p>Click the button above to download the extension. Once downloaded, extract the ZIP file (double-click it on Mac, right-click and "Extract All" on Windows).</p>
+                </div>
+            </div>
+            
+            <div class="step">
+                <div class="step-number">2</div>
+                <div class="step-content">
+                    <h3>Open Chrome Extensions</h3>
+                    <p>Copy this link and paste it into your Chrome browser: <code>chrome://extensions/</code></p>
+                    <p style="margin-top: 8px;">Or: Click the three dots (⋮) in Chrome → More Tools → Extensions</p>
+                </div>
+            </div>
+            
+            <div class="step">
+                <div class="step-number">3</div>
+                <div class="step-content">
+                    <h3>Enable Developer Mode & Load Extension</h3>
+                    <p>1. Toggle <strong>"Developer mode"</strong> ON (top-right corner)</p>
+                    <p>2. Click <strong>"Load unpacked"</strong></p>
+                    <p>3. Select the folder you extracted from the ZIP file</p>
+                    <p>4. Done! The extension is now active 🎉</p>
+                </div>
+            </div>
+        </div>
+        
+        <div style="margin-top: 30px; padding: 20px; background: #e7f3ff; border-radius: 12px; border-left: 4px solid #2196F3;">
+            <p style="color: #0d47a1; margin: 0; font-size: 14px;">
+                <strong>💡 Tip:</strong> The extension will automatically work on Twitter/X, Facebook, and other social media sites. Just start typing and watch for suggestions!
+            </p>
+        </div>
+    </div>
+</body>
+</html>
+
