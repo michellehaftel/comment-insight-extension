@@ -1461,12 +1461,26 @@ function showSuccessTooltip(element) {
     existingTooltip.remove();
   }
   
+  // Array of encouraging messages - randomly selected each time
+  const encouragingMessages = [
+    "✨ Good job! You're contributing to more respectful dialogue.",
+    "✨ Good job! You're taking steps toward more peaceful conversations.",
+    "✨ Good job! You're helping build more constructive conversations, one message at a time.",
+    "✨ Good job! You're making conversations more peaceful, one message at a time.",
+    "✨ Good job! Every thoughtful word helps build a more understanding world.",
+    "✨ Good job! You're creating space for more meaningful dialogue.",
+    "✨ Good job! Your words are making a positive difference."
+  ];
+  
+  // Randomly select a message
+  const randomMessage = encouragingMessages[Math.floor(Math.random() * encouragingMessages.length)];
+  
   const successTooltip = document.createElement("div");
   successTooltip.className = "escalation-tooltip success-tooltip";
   successTooltip.innerHTML = `
     <div class="tooltip-container">
       <div class="tooltip-content success-content">
-        <p class="tooltip-message success-message">✨ Good job! Your message has been de-escalated.</p>
+        <p class="tooltip-message success-message">${randomMessage}</p>
       </div>
     </div>
   `;
