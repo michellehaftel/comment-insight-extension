@@ -1512,6 +1512,38 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     </div>
   `;
   document.body.appendChild(tooltip);
+  
+  // Position tooltip near the target element
+  if (targetElement) {
+    const rect = targetElement.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+    
+    // Position below the element with some spacing
+    let top = rect.bottom + window.scrollY + 10;
+    let left = rect.left + window.scrollX;
+    
+    // Ensure tooltip doesn't go off-screen
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    // Adjust horizontal position if tooltip goes off right edge
+    if (left + tooltipRect.width > viewportWidth) {
+      left = viewportWidth - tooltipRect.width - 20;
+    }
+    
+    // If tooltip goes below viewport, position it above the element instead
+    if (top + tooltipRect.height > viewportHeight + window.scrollY) {
+      top = rect.top + window.scrollY - tooltipRect.height - 10;
+    }
+    
+    // Ensure minimum left position
+    if (left < 10) {
+      left = 10;
+    }
+    
+    tooltip.style.top = `${top}px`;
+    tooltip.style.left = `${left}px`;
+  }
 
   // Generate rephrased version (async - may call API)
   let rephrasedText;
