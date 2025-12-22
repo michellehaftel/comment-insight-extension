@@ -23,7 +23,7 @@ app.use(express.json());
 // Rate limiting storage (simple in-memory for now)
 const rateLimitMap = new Map();
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
-const RATE_LIMIT_MAX_REQUESTS = 20; // 20 requests per minute per IP
+const RATE_LIMIT_MAX_REQUESTS = 100; // 100 requests per minute per IP (increased for better UX)
 
 // Simple rate limiting middleware
 function rateLimiter(req, res, next) {
@@ -120,7 +120,7 @@ app.post('/api/rephrase', rateLimiter, validateRequest, async (req, res) => {
         });
       }
       
-      const geminiModel = model || 'gemini-3.0-pro-preview';
+      const geminiModel = model || 'gemini-3-pro-preview';
       const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
       
       const geminiRequest = {
@@ -230,12 +230,23 @@ app.post('/api/rephrase', rateLimiter, validateRequest, async (req, res) => {
     console.error('❌ Error in proxy:', error.message);
     
     if (error.response) {
-      // AI API error
-      console.error(`${API_PROVIDER.toUpperCase()} API error:`, error.response.status, error.response.data);
+      // AI API error - handle rate limits specifically
+      const status = error.response.status;
+      console.error(`${API_PROVIDER.toUpperCase()} API error:`, status, error.response.data);
+      
+      if (status === 429) {
+        // Rate limit from AI service - return helpful message
+        return res.status(429).json({
+          error: 'AI service rate limit exceeded',
+          details: 'The AI service is temporarily busy. Please try again in a moment.',
+          retryAfter: 60 // Suggest waiting 60 seconds
+        });
+      }
+      
       const errorMessage = error.response.data?.error?.message || 
                           error.response.data?.message ||
                           (typeof error.response.data === 'string' ? error.response.data : JSON.stringify(error.response.data));
-      return res.status(error.response.status || 500).json({
+      return res.status(status || 500).json({
         error: 'AI service error',
         details: errorMessage
       });
