@@ -207,8 +207,24 @@ app.post('/api/rephrase', rateLimiter, validateRequest, async (req, res) => {
       });
     }
     
-    // Return the parsed response
-    res.json(parsed);
+    // Extract rephrasedText from the response
+    // The response should have a rephrasedText field
+    let rephrasedText = null;
+    if (parsed && typeof parsed === 'object') {
+      rephrasedText = parsed.rephrasedText || parsed.rephrased || parsed.text || null;
+    }
+    
+    // If no rephrasedText found, return error
+    if (!rephrasedText) {
+      console.error('❌ No rephrasedText found in AI response:', parsed);
+      return res.status(500).json({ 
+        error: 'AI response missing rephrasedText field',
+        details: 'The AI service response did not contain the expected rephrasedText field.'
+      });
+    }
+    
+    // Return consistent format
+    res.json({ rephrasedText });
     
   } catch (error) {
     console.error('❌ Error in proxy:', error.message);
