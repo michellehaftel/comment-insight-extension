@@ -120,7 +120,9 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
         });
       }
       
-      const geminiModel = model || 'gemini-pro';
+      // Remove 'models/' prefix if present (API adds it automatically)
+      let geminiModel = (model || 'gemini-1.5-flash').replace(/^models\//, '');
+      // Use v1beta - this is the correct API version for current models
       const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
       
       const geminiRequest = {
@@ -139,6 +141,7 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
       
       console.log(`📝 Forwarding request to Gemini (text length: ${text.length}, model: ${geminiModel})`);
       
+      // Make the actual request
       const geminiResponse = await axios.post(
         geminiUrl,
         geminiRequest,
