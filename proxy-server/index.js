@@ -120,7 +120,7 @@ app.post('/api/rephrase', rateLimiter, validateRequest, async (req, res) => {
         });
       }
       
-      const geminiModel = model || 'gemini-1.5-pro';
+      const geminiModel = model || 'gemini-2.5-flash';
       const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
       
       const geminiRequest = {
