@@ -40,6 +40,36 @@
   border-left: 3px solid #B880FF;
 }
 
+/* Hebrew/RTL support */
+.hebrew-tooltip .tooltip-content.rtl-content {
+  direction: rtl;
+  text-align: right;
+}
+
+.hebrew-tooltip .rtl-text {
+  direction: rtl;
+  text-align: right;
+}
+
+.hebrew-tooltip .rtl-suggestion {
+  border-left: none;
+  border-right: 3px solid #B880FF;
+}
+
+.hebrew-tooltip .tooltip-suggestion-label {
+  text-align: right;
+}
+
+.hebrew-tooltip .tooltip-suggestion-text {
+  text-align: right;
+  direction: rtl;
+}
+
+.hebrew-tooltip .rtl-buttons {
+  justify-content: center;
+  flex-direction: row-reverse;
+}
+
 .tooltip-suggestion-label {
   color: #666;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -64,6 +94,11 @@
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+}
+
+/* Center dismiss button when it's the only secondary action */
+.dismiss-btn {
+  text-align: center;
 }
 
 /* Button base styles */
@@ -122,13 +157,25 @@
 .success-content {
   background: linear-gradient(135deg, #B880FF 0%, #9d5fdf 100%);
   border: none;
+  padding: 16px 20px !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .success-message {
-  color: white;
-  text-align: center;
-  margin: 0;
+  color: white !important;
+  text-align: center !important;
+  margin: 0 !important;
   font-weight: 600;
+  width: 100%;
+  line-height: 1.5;
+}
+
+.success-message br {
+  display: block;
+  content: "";
+  margin-top: 4px;
 }
 
 /* Responsive design */
