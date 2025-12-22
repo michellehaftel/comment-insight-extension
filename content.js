@@ -1673,10 +1673,15 @@ function showSuccessTooltip(element) {
   successTooltip.innerHTML = `
     <div class="tooltip-container">
       <div class="tooltip-content success-content">
-        <p class="tooltip-message success-message">
-          ✨ Good job!<br>
-          ${randomMessage}
-        </p>
+        <div class="success-icon">
+          <svg viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg">
+            <path d="M2 6l2 2 6-6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="success-message-wrapper">
+          <p class="success-title">Good job!</p>
+          <p class="success-description">${randomMessage}</p>
+        </div>
       </div>
     </div>
   `;
@@ -1793,13 +1798,16 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     <div class="tooltip-container">
       <div class="tooltip-content ${isHebrew ? 'rtl-content' : ''}">
         <p class="tooltip-message ${isHebrew ? 'rtl-text' : ''}">${uiText.warning}</p>
-        <div class="tooltip-suggestion ${isHebrew ? 'rtl-suggestion' : ''}">
+        <div class="tooltip-suggestion ${isHebrew ? 'rtl-suggestion' : ''}" style="display: none;">
           <p class="tooltip-suggestion-label ${isHebrew ? 'rtl-text' : ''}">${uiText.suggestLabel}</p>
-          <p class="tooltip-suggestion-text ${isHebrew ? 'rtl-text' : ''}">${uiText.generating}</p>
+          <p class="tooltip-suggestion-text ${isHebrew ? 'rtl-text' : ''}"></p>
         </div>
         <div class="tooltip-buttons ${isHebrew ? 'rtl-buttons' : ''}">
           <button id="dismissBtn" class="tooltip-btn dismiss-btn">${uiText.dismiss}</button>
-          <button id="rephraseBtn" class="tooltip-btn rephrase-btn" disabled>${uiText.rephrase}</button>
+          <button id="rephraseBtn" class="tooltip-btn rephrase-btn loading" disabled>
+            <span class="spinner"></span>
+            ${uiText.rephrase}
+          </button>
         </div>
       </div>
     </div>
@@ -1849,9 +1857,14 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   }
   
   // Update tooltip with the rephrased text
+  const suggestionContainer = tooltip.querySelector('.tooltip-suggestion');
   const suggestionText = tooltip.querySelector('.tooltip-suggestion-text');
   const rephraseBtn = document.getElementById('rephraseBtn');
   if (suggestionText && rephrasedText) {
+    // Show the suggestion container now that we have the rephrased text
+    if (suggestionContainer) {
+      suggestionContainer.style.display = 'block';
+    }
     // FINAL cleanup for Hebrew - remove any English that might have slipped through
     let finalText = rephrasedText;
     if (isHebrew || containsHebrew(rephrasedText)) {
@@ -1880,6 +1893,9 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     suggestionText.textContent = `"${finalText}"`;
     if (rephraseBtn) {
       rephraseBtn.disabled = false;
+      rephraseBtn.classList.remove('loading');
+      const spinner = rephraseBtn.querySelector('.spinner');
+      if (spinner) spinner.remove();
     }
   } else {
     // If rephrasing failed, show fallback
@@ -1894,6 +1910,9 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     }
     if (rephraseBtn) {
       rephraseBtn.disabled = true;
+      rephraseBtn.classList.remove('loading');
+      const spinner = rephraseBtn.querySelector('.spinner');
+      if (spinner) spinner.remove();
     }
   }
 
