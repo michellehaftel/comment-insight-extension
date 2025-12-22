@@ -217,8 +217,8 @@ app.post('/api/rephrase', rateLimiter, validateRequest, async (req, res) => {
       // AI API error
       console.error(`${API_PROVIDER.toUpperCase()} API error:`, error.response.status, error.response.data);
       const errorMessage = error.response.data?.error?.message || 
-                          error.response.data?.error?.message || 
-                          JSON.stringify(error.response.data);
+                          error.response.data?.message ||
+                          (typeof error.response.data === 'string' ? error.response.data : JSON.stringify(error.response.data));
       return res.status(error.response.status || 500).json({
         error: 'AI service error',
         details: errorMessage
