@@ -120,8 +120,7 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
         });
       }
       
-      // Use a stable model name
-      const geminiModel = model || 'gemini-1.5-pro';
+      const geminiModel = model || 'gemini-2.5-flash';
       // Use v1beta - this is the correct API version for current models
       const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
       
