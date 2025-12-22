@@ -227,7 +227,10 @@ function hasHighRiskKeywords(text) {
     "this makes me sick",
     "worst",
     "stupid",
+    "dumb",
     "idiot",
+    "moron",
+    "ass",
     "hate",
     "disgusting",
     "ridiculous",
@@ -408,7 +411,9 @@ function isEscalating(text) {
 
   // 4. Judging/condemning language
   const judgingPatterns = [
-    /\b(you're (?:terrible|awful|horrible|disgusting|pathetic|ridiculous))\b/i,
+    /\b(you're (?:terrible|awful|horrible|disgusting|pathetic|ridiculous|stupid|dumb|an idiot|a moron|an ass|an asshole))\b/i,
+    /\b(you are such a (?:dumb (?:ass|asshole)|idiot|moron|jerk|fool|terrible|awful|horrible|disgusting|pathetic|ridiculous|stupid))\b/i, // "you are such a dumb ass", "you are such a idiot", etc.
+    /\b(you are (?:so |such )?(?:terrible|awful|horrible|disgusting|pathetic|ridiculous|stupid|dumb(?:ass| ass)?|idiot|moron|ass(?:hole)?|jerk|fool))\b/i, // "you are so stupid", "you are dumb", etc.
     /\b(that's (?:terrible|awful|horrible|disgusting|pathetic|ridiculous|stupid|dumb|idiotic))\b/i,
     /\b(how (?:dare|could) you)\b/i,
     /\b(you should (?:be ashamed|feel bad|know better))\b/i,
