@@ -693,7 +693,8 @@ async function rephraseViaAPI(text) {
         console.error('📝 Error details:', errorData.details || errorData.error || 'Unknown error');
         console.error('💡 Please check that OPENAI_API_KEY is correctly set in Render environment variables');
       } else if (response.status === 429) {
-        console.error('⚠️ Rate limit exceeded. Please try again later.');
+        console.error('⚠️ Rate limit exceeded. Please try again in a moment.');
+        console.error('💡 This could be from the AI service. Wait a few seconds and try again.');
       } else if (response.status === 504) {
         console.error('⚠️ Request timeout. The proxy server did not respond in time.');
       } else {
@@ -1864,7 +1865,7 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   // Update tooltip with the rephrased text
   const suggestionContainer = tooltip.querySelector('.tooltip-suggestion');
   const suggestionText = tooltip.querySelector('.tooltip-suggestion-text');
-  const rephraseBtn = document.getElementById('rephraseBtn');
+  const rephraseBtn = tooltip.querySelector('#rephraseBtn') || document.getElementById('rephraseBtn');
   if (suggestionText && rephrasedText) {
     // Show the suggestion container now that we have the rephrased text
     if (suggestionContainer) {
@@ -1921,8 +1922,16 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     }
   }
 
-  // Add event listeners for buttons
-  document.getElementById("dismissBtn").onclick = () => {
+  // Add event listeners for buttons - ensure they're always accessible
+  const dismissBtn = document.getElementById("dismissBtn");
+  const rephraseBtnElement = document.getElementById("rephraseBtn");
+  
+  if (!dismissBtn || !rephraseBtnElement) {
+    console.error("❌ Buttons not found in tooltip!");
+    return;
+  }
+  
+  dismissBtn.onclick = () => {
     // Log that user dismissed the suggestion
     logInteraction({
       usersOriginalContent: originalText,
@@ -1934,7 +1943,7 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     tooltip.remove();
   };
 
-  document.getElementById("rephraseBtn").onclick = () => {
+  rephraseBtnElement.onclick = () => {
     console.log("🔄 Rephrasing text...");
     console.log("Original:", originalText);
     console.log("Rephrased:", rephrasedText);

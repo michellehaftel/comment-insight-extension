@@ -93,8 +93,8 @@ app.get('/debug/config', (req, res) => {
   });
 });
 
-// Main proxy endpoint
-app.post('/api/rephrase', rateLimiter, validateRequest, async (req, res) => {
+// Main proxy endpoint (rate limiter removed - AI services have their own rate limits)
+app.post('/api/rephrase', validateRequest, async (req, res) => {
   try {
     const { text, model, temperature, max_tokens, top_p } = req.body;
     
