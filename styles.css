@@ -134,9 +134,20 @@
   border: 1px solid #B880FF;
 }
 
-.rephrase-btn:hover {
+.rephrase-btn:hover:not(:disabled) {
   background: #9d5fdf;
   border-color: #9d5fdf;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(184, 128, 255, 0.3);
+}
+
+.rephrase-btn:disabled {
+  background: #cccccc;
+  color: #666666;
+  border: 1px solid #cccccc;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(184, 128, 255, 0.3);
 }
