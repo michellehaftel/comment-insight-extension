@@ -120,8 +120,8 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
         });
       }
       
-      // Remove 'models/' prefix if present (API adds it automatically)
-      let geminiModel = (model || 'gemini-1.5-flash').replace(/^models\//, '');
+      // Use a stable model name
+      const geminiModel = model || 'gemini-1.5-pro';
       // Use v1beta - this is the correct API version for current models
       const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
       
