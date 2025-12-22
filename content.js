@@ -169,14 +169,37 @@ async function logInteraction(data) {
     console.log(`📝 Post type: ${postContext.isReply ? 'Reply' : 'New Post'}`);
     
     // Send to background script
-    chrome.runtime.sendMessage({
-      type: 'LOG_INTERACTION',
-      data: logData
-    }, (response) => {
-      if (response && response.success) {
-        console.log('✅ Data logged successfully');
+    // Check if chrome runtime is available
+    if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) {
+      console.warn('⚠️ Chrome runtime not available - cannot log interaction');
+      return;
+    }
+    
+    try {
+      chrome.runtime.sendMessage({
+        type: 'LOG_INTERACTION',
+        data: logData
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+          // Handle extension context invalidated error
+          if (chrome.runtime.lastError.message.includes('Extension context invalidated')) {
+            console.warn('⚠️ Extension context invalidated - interaction not logged. Please reload the extension.');
+          } else {
+            console.error('❌ Error sending message:', chrome.runtime.lastError.message);
+          }
+          return;
+        }
+        if (response && response.success) {
+          console.log('✅ Data logged successfully');
+        }
+      });
+    } catch (sendError) {
+      if (sendError.message && sendError.message.includes('Extension context invalidated')) {
+        console.warn('⚠️ Extension context invalidated - interaction not logged. Please reload the extension.');
+      } else {
+        console.error('❌ Error sending message to background:', sendError);
       }
-    });
+    }
   } catch (error) {
     console.error('❌ Error logging interaction:', error);
   }
@@ -216,12 +239,48 @@ function hasHighRiskKeywords(text) {
   return keywordList.some((kw) => lowercase.includes(kw));
 }
 
+/**
+ * Detect if text contains Hebrew characters
+ */
+function containsHebrew(text) {
+  // Hebrew Unicode range: \u0590-\u05FF
+  return /[\u0590-\u05FF]/.test(text);
+}
+
+/**
+ * Detect if text contains non-Latin characters (Arabic, Hebrew, CJK, etc.)
+ */
+function containsNonLatin(text) {
+  // Check for non-ASCII letters (excluding basic punctuation)
+  return /[^\x00-\x7F]/.test(text) && /[\u0590-\u05FF\u0600-\u06FF\u4E00-\u9FFF\u3400-\u4DBF]/.test(text);
+}
+
 function isEscalating(text) {
   const trimmedText = text.trim();
   
   // Minimum length threshold
   if (trimmedText.length < 8 && !hasHighRiskKeywords(trimmedText)) {
     return { isEscalatory: false, escalationType: 'none' };
+  }
+
+  // If text contains Hebrew or other non-Latin characters, and API is enabled,
+  // we should use API-based detection (but for now, allow it through for API check)
+  const hasNonLatin = containsNonLatin(trimmedText);
+  const hasHebrew = containsHebrew(trimmedText);
+  
+  // For non-English text (especially Hebrew), we rely on API for detection
+  // So we return a moderate escalation score to trigger API check
+  if (hasHebrew || (hasNonLatin && USE_API)) {
+    // If we have substantial text in Hebrew, assume it might be escalatory
+    // and let the API do the real detection
+    if (trimmedText.length >= 10) {
+      return { 
+        isEscalatory: true, 
+        escalationType: 'unknown',
+        reasons: ['Non-English text detected - using API for detection'],
+        requiresAPI: true // Flag to indicate API should be used
+      };
+    }
   }
 
   let escalationScore = 0;
@@ -301,7 +360,8 @@ function isEscalating(text) {
     /\b(you (?:always|never|can't|don't|won't|shouldn't|are|were|did|do))\b/i,
     /\b(you (?:always|never) (?:do|say|think|act|behave))\b/i,
     /\b(you're (?:always|never|just|so|too|being))\b/i,
-    /\b(you (?:make|made|cause|caused|force|forced) (?:me|us|this|that))\b/i,
+    /\b(you (?:make|made|cause|caused|force|forced) (?:me|us|this|that)(?:\s+\w+)?)/i, // "you make me sick", "you make me angry", etc. (matches even if followed by adjective)
+    /\b(you (?:make|made) (?:me|us) (?:feel )?(?:sick|angry|sad|mad|upset|disgusted|furious|annoyed|frustrated|disappointed))\b/i, // Specific emotional reactions
     /\b(it's (?:your|you're) (?:fault|problem|issue|doing))\b/i,
     /\b(?:your|you're) (?:fault|problem|issue|doing)\b/i, // "your fault", "you're wrong" without "it's"
     /\b(?:this|that|it) (?:is|was) (?:your|you're) (?:fault|problem)\b/i, // "this is your fault"
@@ -555,6 +615,7 @@ function checkForEscalation(element) {
   
   if (escalationResult.isEscalatory) {
     console.log("🚨 Escalation detected - showing warning tooltip");
+    console.log("📝 Requires API:", escalationResult.requiresAPI || false);
     createEscalationTooltip(text, element, escalationResult.escalationType);
   } else {
     console.log("✅ No escalation detected");
@@ -567,7 +628,8 @@ function checkForEscalation(element) {
 }
 
 /**
- * Call OpenAI API to rephrase text using ECPM prompt
+ * Call proxy server to rephrase text using ECPM prompt
+ * API key is handled server-side by the proxy
  */
 async function rephraseViaAPI(text) {
   try {
@@ -582,101 +644,218 @@ async function rephraseViaAPI(text) {
       return null;
     }
     
-    // Get API key from Chrome storage (users configure it in popup)
-    let apiKey = '';
-    try {
-      const storage = await chrome.storage.local.get(['openaiApiKey']);
-      apiKey = storage.openaiApiKey || '';
-    } catch (e) {
-      console.error('❌ Error loading API key from storage:', e);
-    }
-    
-    if (!apiKey || apiKey.trim() === '') {
-      console.log('⚠️ No API key configured. Please add your OpenAI API key in the extension popup.');
+    if (typeof PROXY_SERVER_URL === 'undefined' || !PROXY_SERVER_URL) {
+      console.error('❌ PROXY_SERVER_URL not configured in config.js');
+      console.error('   Please set PROXY_SERVER_URL to your proxy server deployment URL');
       return null;
     }
     
-    // Replace ALL {TEXT} placeholders in prompt with actual text
-    // Using replaceAll to handle multiple occurrences
-    const prompt = ECPM_PROMPT.replace(/\{TEXT\}/g, text);
-    
-    // Prepare API request
+    // Prepare request to proxy server
     const requestBody = {
-      model: API_CONFIG.model || 'gpt-4',
-      messages: [
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
+      text: text,
+      model: API_CONFIG.model || 'gpt-4o',
       temperature: API_CONFIG.temperature || 1.0,
       max_tokens: API_CONFIG.max_tokens || 2048,
-      top_p: API_CONFIG.top_p || 1.0
+      top_p: API_CONFIG.top_p || 1.0,
+      prompt: ECPM_PROMPT // Send the full prompt template (proxy will replace {TEXT})
     };
     
-    // Add response_format if specified (only if it's json_object)
-    // For 'text' mode, we don't send this parameter at all
-    if (API_CONFIG.response_format && API_CONFIG.response_format === 'json_object') {
-      requestBody.response_format = { type: 'json_object' };
-    }
-    
-    console.log('🤖 Calling OpenAI API for rephrasing...');
-    console.log('📝 Model:', API_CONFIG.model);
+    console.log('🤖 Calling proxy server for rephrasing...');
+    console.log('📡 Proxy URL:', PROXY_SERVER_URL);
+    console.log('📝 Model:', requestBody.model);
+    console.log('📝 Text length:', text.length);
     console.log('📝 Parameters:', {
       temperature: requestBody.temperature,
       max_tokens: requestBody.max_tokens,
-      top_p: requestBody.top_p,
-      response_format: requestBody.response_format
+      top_p: requestBody.top_p
     });
-    console.log('📝 Prompt preview:', prompt.substring(0, 200) + '...');
     
-    // Call OpenAI API
-    const response = await fetch(`${API_CONFIG.baseURL}/chat/completions`, {
+    // Call proxy server
+    const response = await fetch(`${PROXY_SERVER_URL}/api/rephrase`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify(requestBody)
     });
     
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ API Error:', response.status, errorText);
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      
+      // Better error logging
+      if (response.status === 401) {
+        console.error('❌ Authentication error (401): Invalid API key on server');
+        console.error('📝 Error details:', errorData.details || errorData.error || 'Unknown error');
+        console.error('💡 Please check that OPENAI_API_KEY is correctly set in Render environment variables');
+      } else if (response.status === 429) {
+        console.error('⚠️ Rate limit exceeded. Please try again later.');
+      } else if (response.status === 504) {
+        console.error('⚠️ Request timeout. The proxy server did not respond in time.');
+      } else {
+        console.error('❌ Proxy server error:', response.status, errorData);
+      }
+      
       return null;
     }
     
-    const data = await response.json();
+    const parsed = await response.json();
     
-    // Extract the response content
-    let responseText = data.choices[0]?.message?.content || '';
+    console.log('📥 Proxy server response received');
+    console.log('📄 Response keys:', Object.keys(parsed || {}));
     
-    // If response_format is 'text', we need to parse JSON from the text response
-    // The prompt asks for JSON output, so we need to parse it
-    if (responseText) {
+    // Parse JSON response
+    if (parsed) {
       try {
-        // Try to extract JSON from the response
-        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          if (parsed.rephrasedText) {
-            console.log('✅ API rephrasing successful:', parsed.rephrasedText);
-            return parsed.rephrasedText;
-          }
-        }
+        console.log('✅ Successfully received response from proxy:', parsed);
         
-        // If no JSON structure, return the text as-is
-        console.log('✅ API rephrasing successful (plain text)');
-        return responseText.trim();
+        // Extract rephrased text
+        if (parsed && parsed.rephrasedText) {
+          let rephrased = parsed.rephrasedText.trim();
+          
+          // If original text was Hebrew, ensure rephrased text is entirely in Hebrew
+          // VERY AGGRESSIVE cleanup to remove all English
+          if (containsHebrew(text)) {
+            console.log('🔍 Original Hebrew text detected, cleaning response...');
+            console.log('📝 Original rephrased text:', rephrased);
+            
+            // Step 1: Find the first Hebrew character and remove EVERYTHING before it (most important!)
+            const firstHebrewIndex = rephrased.search(/[\u0590-\u05FF]/);
+            if (firstHebrewIndex >= 0) {
+              console.log(`🗑️ Removing ${firstHebrewIndex} characters before first Hebrew character`);
+              rephrased = rephrased.substring(firstHebrewIndex);
+              // Also remove any punctuation/commas at the start after Hebrew begins
+              rephrased = rephrased.replace(/^[\s,.:;!?-]+/, '');
+            } else {
+              // No Hebrew found at all - this is a problem, but try to clean anyway
+              console.warn('⚠️ No Hebrew characters found in response!');
+            }
+            
+            // Step 2: Remove ALL English text patterns at the start (before any Hebrew)
+            // This catches anything that might have slipped through
+            rephrased = rephrased.replace(/^[^\u0590-\u05FF]*([\u0590-\u05FF])/, '$1');
+            
+            // Step 3: Remove common English prefixes/phrases (case insensitive, with punctuation)
+            const englishPhrases = [
+              /^In my view[,\s.:;!?-]*/i,
+              /^I see[,\s.:;!?-]*/i,
+              /^I think[,\s.:;!?-]*/i,
+              /^I feel[,\s.:;!?-]*/i,
+              /^I believe[,\s.:;!?-]*/i,
+              /^From my perspective[,\s.:;!?-]*/i,
+              /^In my opinion[,\s.:;!?-]*/i,
+              /^I understand that[,\s.:;!?-]*/i,
+              /^I would say[,\s.:;!?-]*/i,
+              /^I believe that[,\s.:;!?-]*/i,
+              /^In my experience[,\s.:;!?-]*/i,
+              /^To me[,\s.:;!?-]*/i,
+              /^As I see it[,\s.:;!?-]*/i,
+              /^From where I stand[,\s.:;!?-]*/i,
+              /^In my[,\s.:;!?-]*/i,  // Catch "In my" as a general pattern
+            ];
+            
+            // Apply each regex pattern multiple times until nothing matches
+            let changed = true;
+            let iterations = 0;
+            while (changed && iterations < 10) {
+              changed = false;
+              for (const pattern of englishPhrases) {
+                const before = rephrased;
+                rephrased = rephrased.replace(pattern, '').trim();
+                if (before !== rephrased) {
+                  changed = true;
+                  console.log(`🗑️ Removed English phrase with pattern ${pattern}, result:`, rephrased);
+                }
+              }
+              iterations++;
+            }
+            
+            // Step 4: Remove any English words at the start (any sequence of Latin letters)
+            rephrased = rephrased.replace(/^[A-Za-z]+(\s+[A-Za-z]+)*[,\s.:;!?-]*/i, '').trim();
+            
+            // Step 5: Remove ALL English words anywhere in the text
+            // Split by whitespace and rebuild with only Hebrew-containing parts
+            let cleaned = '';
+            const parts = rephrased.split(/(\s+)/);
+            for (let i = 0; i < parts.length; i++) {
+              const part = parts[i];
+              // Keep if it contains Hebrew characters
+              if (/[\u0590-\u05FF]/.test(part)) {
+                cleaned += part;
+              }
+              // Keep if it's only whitespace or punctuation
+              else if (/^[\s\p{P}\u0590-\u05FF]*$/u.test(part) || /^[\s,.:;!?\-—–""''()]+$/.test(part)) {
+                cleaned += part;
+              }
+              // Remove if it contains only Latin letters (English words)
+              else if (/^[A-Za-z]+$/.test(part.trim())) {
+                console.log(`🗑️ Removing English word: "${part}"`);
+                // Skip it - don't add to cleaned
+              }
+              // Keep numbers and other symbols
+              else {
+                cleaned += part;
+              }
+            }
+            rephrased = cleaned.replace(/\s+/g, ' ').trim();
+            
+            // Step 6: Remove surrounding quotes if they're at the edges
+            rephrased = rephrased.replace(/^["'`]+|["'`]+$/g, '');
+            
+            // Step 7: Final aggressive pass - extract ONLY Hebrew and adjacent punctuation
+            const hasEnglish = /[A-Za-z]{2,}/.test(rephrased);
+            if (hasEnglish) {
+              console.warn('⚠️ STILL contains English after all cleanup:', rephrased);
+              
+              // Find all Hebrew text segments (Hebrew + punctuation/spaces)
+              const hebrewSegments = rephrased.match(/[\u0590-\u05FF][\u0590-\u05FF\s\p{P}]*[\u0590-\u05FF]|[\u0590-\u05FF]+/gu);
+              if (hebrewSegments && hebrewSegments.length > 0) {
+                rephrased = hebrewSegments.join(' ').replace(/\s+/g, ' ').trim();
+                console.log('✅ Extracted only Hebrew segments:', rephrased);
+              } else {
+                // Last resort: find first Hebrew char and take everything from there
+                const firstHebrewPos = rephrased.search(/[\u0590-\u05FF]/);
+                if (firstHebrewPos >= 0) {
+                  rephrased = rephrased.substring(firstHebrewPos);
+                  // Remove any remaining English
+                  rephrased = rephrased.replace(/[A-Za-z]/g, '').replace(/\s+/g, ' ').trim();
+                }
+              }
+            }
+            
+            console.log('✅ Final cleaned Hebrew text:', rephrased);
+            
+            // Final validation
+            if (containsHebrew(rephrased) && /[A-Za-z]{2,}/.test(rephrased)) {
+              console.error('❌ ERROR: Cleaned text still contains English!', rephrased);
+            }
+          }
+          
+          console.log('✅ API rephrasing successful:', rephrased);
+          console.log('📊 Full response:', {
+            riskLevel: parsed.riskLevel,
+            escalationType: parsed.escalationType,
+            rephrasedLength: rephrased.length,
+            containsHebrew: containsHebrew(rephrased),
+            originalWasHebrew: containsHebrew(text)
+          });
+          return rephrased;
+        } else if (parsed && parsed.isEscalatory === false) {
+          console.log('ℹ️ Text is already de-escalatory, no rephrasing needed');
+          return null;
+        } else {
+          console.warn('⚠️ Proxy response missing rephrasedText:', parsed);
+          return null;
+        }
       } catch (parseError) {
-        console.warn('⚠️ Could not parse JSON from API response, using raw text');
-        return responseText.trim();
+        console.error('❌ Error processing proxy response:', parseError);
+        console.error('Response data:', parsed);
+        return null;
       }
     }
     
     return null;
   } catch (error) {
-    console.error('❌ Error calling OpenAI API:', error);
+    console.error('❌ Error calling proxy server:', error);
     return null;
   }
 }
@@ -1475,15 +1654,15 @@ function showSuccessTooltip(element) {
     existingTooltip.remove();
   }
   
-  // Array of encouraging messages - randomly selected each time
+  // Array of encouraging messages - randomly selected each time (without "Good job!" prefix)
   const encouragingMessages = [
-    "✨ Good job! You're contributing to more respectful dialogue.",
-    "✨ Good job! You're taking steps toward more peaceful conversations.",
-    "✨ Good job! You're helping build more constructive conversations, one message at a time.",
-    "✨ Good job! You're making conversations more peaceful, one message at a time.",
-    "✨ Good job! Every thoughtful word helps build a more understanding world.",
-    "✨ Good job! You're creating space for more meaningful dialogue.",
-    "✨ Good job! Your words are making a positive difference."
+    "You're contributing to more respectful dialogue.",
+    "You're taking steps toward more peaceful conversations.",
+    "You're helping build more constructive conversations, one message at a time.",
+    "You're making conversations more peaceful, one message at a time.",
+    "Every thoughtful word helps build a more understanding world.",
+    "You're creating space for more meaningful dialogue.",
+    "Your words are making a positive difference."
   ];
   
   // Randomly select a message
@@ -1494,7 +1673,10 @@ function showSuccessTooltip(element) {
   successTooltip.innerHTML = `
     <div class="tooltip-container">
       <div class="tooltip-content success-content">
-        <p class="tooltip-message success-message">${randomMessage}</p>
+        <p class="tooltip-message success-message">
+          ✨ Good job!<br>
+          ${randomMessage}
+        </p>
       </div>
     </div>
   `;
@@ -1549,6 +1731,24 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   const existing = document.querySelector(".escalation-tooltip");
   if (existing) existing.remove();
 
+  // Detect if text is in Hebrew for UI localization
+  const isHebrew = containsHebrew(originalText);
+  
+  // Hebrew UI text
+  const uiText = isHebrew ? {
+    warning: "לתגובה/פוסט שכתבת, יש סיכוי גבוה להסלים את השיח.",
+    suggestLabel: "אופציה מעודנת לשקילה:",
+    dismiss: "בטל",
+    rephrase: "נסח מחדש",
+    generating: "מייצר הצעה..."
+  } : {
+    warning: "This comment/post has a high chance of escalating the conversation.",
+    suggestLabel: "Consider rephrasing:",
+    dismiss: "Dismiss",
+    rephrase: "Rephrase",
+    generating: "⏳ Generating rephrasing suggestion..."
+  };
+
   // Store the element reference - use the one passed in, or try to find it
   let targetElement = element;
   
@@ -1588,18 +1788,18 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   
   // Show tooltip with loading state first
   const tooltip = document.createElement("div");
-  tooltip.className = "escalation-tooltip";
+  tooltip.className = `escalation-tooltip ${isHebrew ? 'hebrew-tooltip' : ''}`;
   tooltip.innerHTML = `
     <div class="tooltip-container">
-      <div class="tooltip-content">
-        <p class="tooltip-message">This comment/post has a high chance of escalating the conversation.</p>
-        <div class="tooltip-suggestion">
-          <p class="tooltip-suggestion-label">Consider rephrasing:</p>
-          <p class="tooltip-suggestion-text">⏳ Generating rephrasing suggestion...</p>
+      <div class="tooltip-content ${isHebrew ? 'rtl-content' : ''}">
+        <p class="tooltip-message ${isHebrew ? 'rtl-text' : ''}">${uiText.warning}</p>
+        <div class="tooltip-suggestion ${isHebrew ? 'rtl-suggestion' : ''}">
+          <p class="tooltip-suggestion-label ${isHebrew ? 'rtl-text' : ''}">${uiText.suggestLabel}</p>
+          <p class="tooltip-suggestion-text ${isHebrew ? 'rtl-text' : ''}">${uiText.generating}</p>
         </div>
-        <div class="tooltip-buttons">
-          <button id="dismissBtn" class="tooltip-btn dismiss-btn">Dismiss</button>
-          <button id="rephraseBtn" class="tooltip-btn rephrase-btn" disabled>Rephrase</button>
+        <div class="tooltip-buttons ${isHebrew ? 'rtl-buttons' : ''}">
+          <button id="dismissBtn" class="tooltip-btn dismiss-btn">${uiText.dismiss}</button>
+          <button id="rephraseBtn" class="tooltip-btn rephrase-btn" disabled>${uiText.rephrase}</button>
         </div>
       </div>
     </div>
@@ -1652,13 +1852,46 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   const suggestionText = tooltip.querySelector('.tooltip-suggestion-text');
   const rephraseBtn = document.getElementById('rephraseBtn');
   if (suggestionText && rephrasedText) {
-    suggestionText.textContent = `"${rephrasedText}"`;
+    // FINAL cleanup for Hebrew - remove any English that might have slipped through
+    let finalText = rephrasedText;
+    if (isHebrew || containsHebrew(rephrasedText)) {
+      // Find first Hebrew character and remove everything before it
+      const firstHebrewPos = finalText.search(/[\u0590-\u05FF]/);
+      if (firstHebrewPos >= 0 && firstHebrewPos > 0) {
+        console.log(`🧹 FINAL CLEANUP: Removing ${firstHebrewPos} chars before Hebrew`);
+        finalText = finalText.substring(firstHebrewPos);
+      }
+      
+      // Remove any remaining English at the start
+      finalText = finalText.replace(/^[A-Za-z\s,.:;!?-]+/, '').trim();
+      
+      // Remove common English phrases
+      finalText = finalText.replace(/^(In my view|I see|I think|I feel|I believe|From my perspective|In my opinion)[,\s.:;!?-]*/i, '').trim();
+      
+      // Remove any standalone English words
+      finalText = finalText.replace(/\b[A-Za-z]{2,}\b/g, '').replace(/\s+/g, ' ').trim();
+      
+      console.log('🧹 FINAL TEXT AFTER CLEANUP:', finalText);
+      
+      // Ensure RTL class is applied
+      suggestionText.classList.add('rtl-text');
+    }
+    
+    suggestionText.textContent = `"${finalText}"`;
     if (rephraseBtn) {
       rephraseBtn.disabled = false;
     }
   } else {
     // If rephrasing failed, show fallback
-    suggestionText.textContent = '"Error generating rephrasing. Please try again."';
+    const errorMsg = isHebrew 
+      ? '"שגיאה ביצירת ניסוח מחדש. אנא נסה שוב."'
+      : '"Error generating rephrasing. Please try again."';
+    if (suggestionText) {
+      if (isHebrew) {
+        suggestionText.classList.add('rtl-text');
+      }
+      suggestionText.textContent = errorMsg;
+    }
     if (rephraseBtn) {
       rephraseBtn.disabled = true;
     }

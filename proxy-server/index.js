@@ -1,5 +1,5 @@
 // Proxy server for De-Escalator extension
-// Forwards OpenAI API requests while keeping API key server-side
+// Forwards AI API requests (OpenAI or Gemini) while keeping API key server-side
 
 const express = require('express');
 const cors = require('cors');
@@ -8,6 +8,10 @@ require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Determine which API provider to use (defaults to OpenAI, but can use GEMINI_API_KEY if set)
+const USE_GEMINI = !!process.env.GEMINI_API_KEY;
+const API_PROVIDER = USE_GEMINI ? 'gemini' : 'openai';
 
 // Middleware
 app.use(cors({
@@ -72,66 +76,132 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Debug endpoint to check API key configuration (helpful for troubleshooting)
+app.get('/debug/config', (req, res) => {
+  const hasGeminiKey = !!process.env.GEMINI_API_KEY;
+  const hasOpenAIKey = !!process.env.OPENAI_API_KEY;
+  const provider = hasGeminiKey ? 'gemini' : 'openai';
+  
+  res.json({
+    provider: provider,
+    hasGeminiKey: hasGeminiKey,
+    hasOpenAIKey: hasOpenAIKey,
+    geminiKeyLength: process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.length : 0,
+    openAIKeyLength: process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.length : 0,
+    geminiKeyPrefix: process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.substring(0, 10) + '...' : 'not set',
+    openAIKeyPrefix: process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.substring(0, 10) + '...' : 'not set'
+  });
+});
+
 // Main proxy endpoint
 app.post('/api/rephrase', rateLimiter, validateRequest, async (req, res) => {
   try {
     const { text, model, temperature, max_tokens, top_p } = req.body;
     
-    // Get API key from environment
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      console.error('❌ OPENAI_API_KEY not configured in environment');
-      return res.status(500).json({ 
-        error: 'Server configuration error. Please contact support.' 
-      });
-    }
-    
-    // Prepare OpenAI request
+    // Prepare prompt
     const prompt = process.env.ECPM_PROMPT || req.body.prompt;
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt is required' });
     }
     
-    const openaiRequest = {
-      model: model || 'gpt-4o',
-      messages: [
-        {
-          role: 'user',
-          content: prompt.replace(/\{TEXT\}/g, text)
-        }
-      ],
-      temperature: temperature || 1.0,
-      max_tokens: max_tokens || 2048,
-      top_p: top_p || 1.0,
-      response_format: { type: 'json_object' }
-    };
+    const fullPrompt = prompt.replace(/\{TEXT\}/g, text);
     
-    console.log(`📝 Forwarding request to OpenAI (text length: ${text.length}, model: ${openaiRequest.model})`);
+    let responseText = '';
     
-    // Forward to OpenAI
-    const openaiResponse = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
-      openaiRequest,
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        timeout: 30000 // 30 second timeout
+    if (USE_GEMINI) {
+      // Use Google Gemini API
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        console.error('❌ GEMINI_API_KEY not configured in environment');
+        console.error('   Available env vars:', Object.keys(process.env).filter(k => k.includes('API') || k.includes('KEY')).join(', '));
+        return res.status(500).json({ 
+          error: 'GEMINI_API_KEY not configured. Please set GEMINI_API_KEY in Render environment variables and redeploy.',
+          hint: 'Check /debug/config endpoint to see current configuration'
+        });
       }
-    );
+      
+      const geminiModel = model || 'gemini-1.5-pro';
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
+      
+      const geminiRequest = {
+        contents: [{
+          parts: [{
+            text: fullPrompt
+          }]
+        }],
+        generationConfig: {
+          temperature: temperature || 1.0,
+          maxOutputTokens: max_tokens || 2048,
+          topP: top_p || 1.0,
+          responseMimeType: 'application/json'
+        }
+      };
+      
+      console.log(`📝 Forwarding request to Gemini (text length: ${text.length}, model: ${geminiModel})`);
+      
+      const geminiResponse = await axios.post(
+        geminiUrl,
+        geminiRequest,
+        {
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          timeout: 30000
+        }
+      );
+      
+      responseText = geminiResponse.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      console.log(`✅ Gemini response received (length: ${responseText.length})`);
+      
+    } else {
+      // Use OpenAI API
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        console.error('❌ OPENAI_API_KEY not configured in environment');
+        return res.status(500).json({ 
+          error: 'Server configuration error. Please contact support.' 
+        });
+      }
+      
+      const openaiRequest = {
+        model: model || 'gpt-4o',
+        messages: [
+          {
+            role: 'user',
+            content: fullPrompt
+          }
+        ],
+        temperature: temperature || 1.0,
+        max_tokens: max_tokens || 2048,
+        top_p: top_p || 1.0,
+        response_format: { type: 'json_object' }
+      };
+      
+      console.log(`📝 Forwarding request to OpenAI (text length: ${text.length}, model: ${openaiRequest.model})`);
+      
+      const openaiResponse = await axios.post(
+        'https://api.openai.com/v1/chat/completions',
+        openaiRequest,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          timeout: 30000
+        }
+      );
+      
+      responseText = openaiResponse.data.choices[0]?.message?.content || '';
+      console.log(`✅ OpenAI response received (length: ${responseText.length})`);
+    }
     
-    // Extract and return the response
-    const responseText = openaiResponse.data.choices[0]?.message?.content || '';
-    
-    console.log(`✅ OpenAI response received (length: ${responseText.length})`);
-    
-    // Parse JSON response from OpenAI
+    // Parse JSON response
     let parsed;
     try {
       parsed = typeof responseText === 'string' ? JSON.parse(responseText) : responseText;
     } catch (parseError) {
-      console.error('❌ Failed to parse OpenAI response as JSON:', parseError);
+      console.error('❌ Failed to parse AI response as JSON:', parseError);
+      console.error('Raw response:', responseText);
       return res.status(500).json({ 
         error: 'Invalid response from AI service' 
       });
@@ -144,15 +214,18 @@ app.post('/api/rephrase', rateLimiter, validateRequest, async (req, res) => {
     console.error('❌ Error in proxy:', error.message);
     
     if (error.response) {
-      // OpenAI API error
-      console.error('OpenAI API error:', error.response.status, error.response.data);
+      // AI API error
+      console.error(`${API_PROVIDER.toUpperCase()} API error:`, error.response.status, error.response.data);
+      const errorMessage = error.response.data?.error?.message || 
+                          error.response.data?.error?.message || 
+                          JSON.stringify(error.response.data);
       return res.status(error.response.status || 500).json({
         error: 'AI service error',
-        details: error.response.data?.error?.message || 'Unknown error'
+        details: errorMessage
       });
     } else if (error.request) {
       // Request made but no response
-      console.error('No response from OpenAI');
+      console.error(`No response from ${API_PROVIDER.toUpperCase()}`);
       return res.status(504).json({
         error: 'Request timeout. The AI service did not respond in time.'
       });
@@ -170,6 +243,11 @@ app.post('/api/rephrase', rateLimiter, validateRequest, async (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Proxy server running on port ${PORT}`);
   console.log(`📡 Health check: http://localhost:${PORT}/health`);
-  console.log(`🔑 API key configured: ${process.env.OPENAI_API_KEY ? 'Yes' : 'No'}`);
+  console.log(`🤖 Using API provider: ${API_PROVIDER.toUpperCase()}`);
+  if (USE_GEMINI) {
+    console.log(`🔑 Gemini API key configured: ${process.env.GEMINI_API_KEY ? 'Yes' : 'No'}`);
+  } else {
+    console.log(`🔑 OpenAI API key configured: ${process.env.OPENAI_API_KEY ? 'Yes' : 'No'}`);
+  }
 });
 

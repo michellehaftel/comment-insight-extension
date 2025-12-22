@@ -78,11 +78,19 @@ curl http://localhost:3000/health
 
 In Render dashboard, go to your service → "Environment" tab:
 
-Add these environment variables:
-- `OPENAI_API_KEY` = `sk-your-actual-api-key-here`
+**Option 1: Use OpenAI (default)**
+- `OPENAI_API_KEY` = `sk-your-actual-api-key-here` (keys start with `sk-`)
 - `PORT` = `10000` (Render sets this automatically, but you can override)
 
-**Important**: Never commit `.env` file to Git. Only use Render's environment variables.
+**Option 2: Use Google Gemini**
+- `GEMINI_API_KEY` = `your-gemini-api-key-here` (keys do NOT start with `sk-`)
+- `PORT` = `10000` (Render sets this automatically, but you can override)
+
+**Important Notes:**
+- The proxy will automatically use Gemini if `GEMINI_API_KEY` is set, otherwise it uses OpenAI
+- Never commit `.env` file to Git. Only use Render's environment variables
+- To get a Gemini API key: https://ai.google.dev/
+- Gemini API keys have a different format than OpenAI (they don't start with `sk-`)
 
 ### Step 5: Deploy
 
