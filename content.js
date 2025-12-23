@@ -675,26 +675,49 @@ async function rephraseViaAPI(text) {
       top_p: requestBody.top_p
     });
     
-    // Call proxy server
-    const response = await fetch(`${PROXY_SERVER_URL}/api/rephrase`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestBody)
-    });
+    // Call proxy server with retry logic for rate limits
+    let response;
+    let lastError = null;
+    const maxRetries = 2;
+    const baseDelay = 2000; // 2 seconds
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (attempt > 0) {
+        // Wait before retry (exponential backoff)
+        const delay = baseDelay * Math.pow(2, attempt - 1);
+        console.log(`⏳ Rate limited. Waiting ${delay/1000}s before retry ${attempt}/${maxRetries}...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+      
+      response = await fetch(`${PROXY_SERVER_URL}/api/rephrase`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      });
+      
+      // If successful or not a rate limit error, break out of retry loop
+      if (response.ok || response.status !== 429) {
+        break;
+      }
+      
+      // Rate limited - will retry if attempts remain
+      lastError = await response.json().catch(() => ({ error: 'Rate limit exceeded' }));
+      console.warn(`⚠️ Rate limit hit (attempt ${attempt + 1}/${maxRetries + 1})`);
+    }
     
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      const errorData = lastError || await response.json().catch(() => ({ error: 'Unknown error' }));
       
       // Better error logging
       if (response.status === 401) {
         console.error('❌ Authentication error (401): Invalid API key on server');
         console.error('📝 Error details:', errorData.details || errorData.error || 'Unknown error');
-        console.error('💡 Please check that OPENAI_API_KEY is correctly set in Render environment variables');
+        console.error('💡 Please check that GEMINI_API_KEY is correctly set in Render environment variables');
       } else if (response.status === 429) {
-        console.error('⚠️ Rate limit exceeded. Please try again in a moment.');
-        console.error('💡 This could be from the AI service. Wait a few seconds and try again.');
+        console.error('⚠️ Rate limit exceeded after retries. Gemini API is busy.');
+        console.error('💡 Please wait 30-60 seconds and try again. This is a limitation of the Gemini API.');
       } else if (response.status === 504) {
         console.error('⚠️ Request timeout. The proxy server did not respond in time.');
       } else {
