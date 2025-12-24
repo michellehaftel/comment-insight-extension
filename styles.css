@@ -1,6 +1,6 @@
 /* Escalation tooltip wrapper */
 .escalation-tooltip {
-  position: absolute;
+  position: fixed;
   z-index: 9999;
   max-width: 400px;
   animation: slideIn 0.3s ease-out;
@@ -19,6 +19,10 @@
   padding: 16px;
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   border: 1px solid #e4e4e7;
+  max-height: 350px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* Tooltip message */
@@ -29,6 +33,7 @@
   line-height: 1.5;
   margin: 0 0 12px 0;
   font-weight: 500;
+  flex-shrink: 0;
 }
 
 /* Tooltip suggestion section - shadcn style */
@@ -38,6 +43,10 @@
   padding: 12px;
   margin: 0 0 12px 0;
   border-left: 2px solid #9333ea;
+  flex-shrink: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Hebrew/RTL support */
@@ -63,6 +72,11 @@
 .hebrew-tooltip .tooltip-suggestion-text {
   text-align: right;
   direction: rtl;
+  max-height: 150px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .hebrew-tooltip .rtl-buttons {
@@ -87,6 +101,11 @@
   line-height: 1.5;
   margin: 0;
   font-style: italic;
+  max-height: 150px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 /* Button container */
@@ -94,6 +113,7 @@
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+  flex-shrink: 0;
 }
 
 /* Button base styles - shadcn style */

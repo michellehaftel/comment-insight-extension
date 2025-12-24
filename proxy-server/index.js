@@ -210,22 +210,36 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
     }
     
     // Extract rephrasedText from the response
-    // The response should have a rephrasedText field
+    // The response should have a rephrasedText field (can be null if text is already de-escalatory)
     let rephrasedText = null;
+    let hasRephrasedTextField = false;
+    
     if (parsed && typeof parsed === 'object') {
-      rephrasedText = parsed.rephrasedText || parsed.rephrased || parsed.text || null;
+      // Check if rephrasedText field exists (even if null)
+      if ('rephrasedText' in parsed) {
+        hasRephrasedTextField = true;
+        rephrasedText = parsed.rephrasedText;
+      } else if ('rephrased' in parsed) {
+        hasRephrasedTextField = true;
+        rephrasedText = parsed.rephrased;
+      } else if ('text' in parsed) {
+        hasRephrasedTextField = true;
+        rephrasedText = parsed.text;
+      }
     }
     
-    // If no rephrasedText found, return error
-    if (!rephrasedText) {
-      console.error('❌ No rephrasedText found in AI response:', parsed);
+    // If rephrasedText field doesn't exist at all, return error
+    // But if it's null (meaning text is already de-escalatory), that's valid
+    if (!hasRephrasedTextField) {
+      console.error('❌ No rephrasedText field found in AI response:', parsed);
       return res.status(500).json({ 
         error: 'AI response missing rephrasedText field',
-        details: 'The AI service response did not contain the expected rephrasedText field.'
+        details: 'The AI service response did not contain the expected rephrasedText field.',
+        debug: { parsedResponse: parsed }
       });
     }
     
-    // Return consistent format
+    // Return consistent format (rephrasedText can be null if text is already de-escalatory)
     res.json({ rephrasedText });
     
   } catch (error) {

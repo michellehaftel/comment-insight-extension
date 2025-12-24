@@ -231,13 +231,17 @@ function hasHighRiskKeywords(text) {
     "idiot",
     "moron",
     "ass",
+    "asshole",
     "hate",
     "disgusting",
     "ridiculous",
     "brainwashed",
     "never work",
     "will never",
-    "anyone who supports"
+    "anyone who supports",
+    "once", // Catch "once X, always X" patterns
+    "always an", // Part of "always an asshole" pattern
+    "forever"
   ];
   return keywordList.some((kw) => lowercase.includes(kw));
 }
@@ -322,7 +326,11 @@ function isEscalating(text) {
     /\b(every (?:arab|palestinian|jew|israeli|leftist|rightist|republican|democrat|liberal|conservative))\b/i,
     /\b(they all|you all|all of you|all of them)\b/i,
     /\b(?:those|these) (?:people|guys|folks) (?:on the (?:other side|left|right))\b/i, // "those people on the other side"
-    /\b(?:anyone|everyone|everybody) who (?:supports?|believes?|thinks?|agrees?)\b/i // "anyone who supports"
+    /\b(?:anyone|everyone|everybody) who (?:supports?|believes?|thinks?|agrees?)\b/i, // "anyone who supports"
+    // "You [group]" patterns - direct address creating us vs them
+    /\b(you (?:lefties?|righties?|libs?|conservatives?|republicans?|democrats?|liberals?|progressives?|leftists?|rightists?|arabs?|palestinians?|jews?|israelis?|zionists?))\b/i, // "you lefties", "you libs", etc.
+    /\b(you (?:people|guys|folks|ones) (?:on the (?:left|right|other side)))\b/i, // "you people on the left"
+    /\b(you (?:left|right|liberal|conservative) (?:people|guys|folks|ones|snowflakes|nutjobs|wackos))\b/i // "you left people", "you conservative nutjobs"
   ];
   
   generalizedPatterns.forEach(pattern => {
@@ -337,6 +345,13 @@ function isEscalating(text) {
     /\b(always|never|everyone|nobody|nothing|everything)\b/i,
     /\b(only|solely|exclusively|completely|totally|absolutely|definitely|certainly)\b/i
   ];
+  
+  // Catch "once X, always X" pattern (categorical absolutism)
+  const onceAlwaysPattern = /\bonce (?:an? |a )?\w+, (?:always|forever) (?:an? |a )?\w+/i;
+  if (onceAlwaysPattern.test(trimmedText)) {
+    escalationScore += 2.5;
+    reasons.push("Categorical absolutist pattern (once X, always X)");
+  }
   
   // Count occurrences of categorical words
   let categoricalCount = 0;
@@ -360,9 +375,11 @@ function isEscalating(text) {
 
   // 1. Accusative "you" statements (blaming)
   const blamePatterns = [
-    /\b(you (?:always|never|can't|don't|won't|shouldn't|are|were|did|do))\b/i,
+    /\b(you (?:always|never|can't|don't|won't|shouldn't|are|were|did|do|have|had))\b/i,
     /\b(you (?:always|never) (?:do|say|think|act|behave))\b/i,
     /\b(you're (?:always|never|just|so|too|being))\b/i,
+    /\b(you (?:lefties?|righties?|libs?|people|guys|folks) (?:always|never|can't|don't|have no|have zero))\b/i, // "you lefties have no idea", "you people always"
+    /\b(you (?:lefties?|righties?|libs?|conservatives?|people|guys|folks) (?:don't understand|don't get it|don't know|have no idea))\b/i, // "you lefties don't understand"
     /\b(you (?:make|made|cause|caused|force|forced) (?:me|us|this|that)(?:\s+\w+)?)/i, // "you make me sick", "you make me angry", etc. (matches even if followed by adjective)
     /\b(you (?:make|made) (?:me|us) (?:feel )?(?:sick|angry|sad|mad|upset|disgusted|furious|annoyed|frustrated|disappointed))\b/i, // Specific emotional reactions
     /\b(it's (?:your|you're) (?:fault|problem|issue|doing))\b/i,
@@ -418,7 +435,11 @@ function isEscalating(text) {
     /\b(how (?:dare|could) you)\b/i,
     /\b(you should (?:be ashamed|feel bad|know better))\b/i,
     /\b(?:is|are|was|were) (?:brainwashed|indoctrinated|deluded|insane|crazy)\b/i, // "is brainwashed", "are brainwashed"
-    /\b(?:anyone|everyone) who (?:supports?|believes?|agrees?) (?:them|this|that) is (?:brainwashed|deluded|insane|crazy|stupid|an idiot)\b/i // "anyone who supports them is brainwashed"
+    /\b(?:anyone|everyone) who (?:supports?|believes?|agrees?) (?:them|this|that) is (?:brainwashed|deluded|insane|crazy|stupid|an idiot)\b/i, // "anyone who supports them is brainwashed"
+    // Catch standalone profanity/insults in judgmental contexts
+    /\b(?:once|once a) (?:an? )?(?:asshole|ass|idiot|moron|jerk|fool|bastard), (?:always|forever) (?:an? )?(?:asshole|ass|idiot|moron|jerk|fool|bastard)\b/i, // "once an asshole, always an asshole"
+    /\b(?:he's|she's|they're|he is|she is|they are) (?:an? )?(?:asshole|ass|idiot|moron|jerk|fool|bastard)\b/i, // Third person insults
+    /\b(?:just )?(?:an? )?(?:asshole|bastard)\b/i // Standalone strong profanity (asshole, bastard) - these are always escalatory
   ];
   
   judgingPatterns.forEach(pattern => {
@@ -721,7 +742,11 @@ async function rephraseViaAPI(text) {
       } else if (response.status === 504) {
         console.error('⚠️ Request timeout. The proxy server did not respond in time.');
       } else {
-        console.error('❌ Proxy server error:', response.status, errorData);
+        console.error('❌ Proxy server error:', response.status);
+        console.error('📝 Error details:', errorData.details || errorData.error || errorData.message || JSON.stringify(errorData));
+        if (errorData.stack) {
+          console.error('📚 Stack trace:', errorData.stack);
+        }
       }
       
       return null;
@@ -913,6 +938,9 @@ async function rephraseForDeEscalation(text) {
   // Fallback: Pattern matching rephrasing (original implementation)
   let rephrased = text;
   
+  // Store original for comparison - if nothing changes, return null to trigger error message
+  const originalTextForComparison = text.trim().toLowerCase();
+  
   // STEP 1: Deep transformations - "you are X" → "I feel/think/observe..."
   // These catch common accusatory patterns and transform them completely
   
@@ -942,6 +970,10 @@ async function rephraseForDeEscalation(text) {
   // STEP 3: Absolute truth statements → subjective statements
   rephrased = rephrased.replace(/\b(?:i am|i'm) right\b/gi, "I believe this");
   rephrased = rephrased.replace(/\b(?:that's|that is) (?:not true|false|a lie)\b/gi, "I understand it differently");
+  // ECPM: Transform dismissive "you have no idea/don't know" → "I" statement with self-accountability
+  // Match "you [really] have no idea [what you are/you're talking about]" as a complete phrase
+  rephrased = rephrased.replace(/\byou (?:really )?have no idea(?: what (?:you are|you're) talking about)?/gi, "I see things differently, and I'm trying to understand your perspective");
+  rephrased = rephrased.replace(/\byou (?:really )?(?:don't understand|don't get it|don't know|have no clue)(?: what (?:you are|you're) talking about)?/gi, "I see things differently, and I'm trying to understand your perspective");
   rephrased = rephrased.replace(/\b(?:you don't|you do not) (?:understand|get it|know)\b/gi, "I'd like to share my perspective");
   rephrased = rephrased.replace(/\b(?:that's|that is) (?:ridiculous|absurd|stupid|insane|crazy)\b/gi, "I find that challenging to understand");
   
@@ -952,7 +984,68 @@ async function rephraseForDeEscalation(text) {
   rephrased = rephrased.replace(/\bit's (?:your|you're) (?:fault|problem|issue|responsibility)\b/gi, "I'm struggling with this");
   rephrased = rephrased.replace(/\b(?:your|you're) (?:fault|problem|issue|responsibility)\b/gi, "I'm struggling with this");
   
-  // STEP 5: Generalized/categorical statements → specific, personal ones
+  // STEP 5: Generalized/categorical statements → specific, personal ones (ECPM: Transform to "I" statements)
+  // Transform "you [group] have no idea/don't understand" FIRST as complete phrases
+  // ECPM requires: Replace "you/they" with "I" statements + personal perspective + self-accountability
+  rephrased = rephrased.replace(/\b(you (?:lefties?|righties?|libs?|conservatives?|republicans?|democrats?|liberals?|progressives?|leftists?|rightists?|people|guys|folks)) (?:have no idea|don't understand|don't get it|don't know|have no clue)\b/gi, (match, group) => {
+    // ECPM transformation: Transform to "I" statement with personal perspective and self-accountability
+    // Preserve meaning (disagreement/understanding gap) while removing categorical blame
+    const groupName = group.replace(/^you /i, "").toLowerCase();
+    const groupMap = {
+      'lefties': 'people on the left',
+      'leftists': 'people on the left',
+      'righties': 'people on the right',
+      'conservatives': 'conservative people',
+      'republicans': 'Republicans',
+      'democrats': 'Democrats',
+      'liberals': 'liberal people',
+      'progressives': 'progressive people',
+      'libs': 'liberal people',
+      'rightists': 'people on the right',
+      'people': 'people',
+      'guys': 'people',
+      'folks': 'people'
+    };
+    const neutralGroup = groupMap[groupName] || `some ${groupName}`;
+    // ECPM: "I" statement expressing personal perspective and self-accountability
+    return `I see things differently from some ${neutralGroup}, and I'm trying to understand their perspective`;
+  });
+  
+  // Transform "you [group]" patterns - these are the most escalatory
+  rephrased = rephrased.replace(/\b(you (?:lefties?|righties?|libs?|conservatives?|republicans?|democrats?|liberals?|progressives?|leftists?|rightists?|arabs?|palestinians?|jews?|israelis?|zionists?))\b/gi, (match) => {
+    const group = match.replace(/^you /i, "").toLowerCase();
+    // Map common group names to more neutral descriptions
+    const groupMap = {
+      'lefties': 'people on the left',
+      'leftists': 'people on the left',
+      'righties': 'people on the right',
+      'conservatives': 'conservative people',
+      'republicans': 'Republicans',
+      'democrats': 'Democrats',
+      'liberals': 'liberal people',
+      'progressives': 'progressive people',
+      'libs': 'liberal people',
+      'rightists': 'people on the right',
+      'arabs': 'Arab people',
+      'palestinians': 'Palestinians',
+      'jews': 'Jewish people',
+      'israelis': 'Israelis',
+      'zionists': 'Zionists'
+    };
+    const neutralGroup = groupMap[group] || `some ${group}`;
+    return `some ${neutralGroup}`;
+  });
+  
+  // Transform "you people/guys/folks [on the left/right]"
+  rephrased = rephrased.replace(/\b(you (?:people|guys|folks|ones) (?:on the (?:left|right|other side)))\b/gi, "some people on that side");
+  rephrased = rephrased.replace(/\b(you (?:left|right|liberal|conservative) (?:people|guys|folks|ones))\b/gi, (match) => {
+    const side = match.match(/\b(left|right|liberal|conservative)\b/i)?.[0]?.toLowerCase() || '';
+    if (side === 'left' || side === 'liberal') return 'some people on the left';
+    if (side === 'right' || side === 'conservative') return 'some people on the right';
+    return 'some people';
+  });
+  
+  // Transform "the [group]" or "all [group]"
   rephrased = rephrased.replace(/\b(?:the|all) (?:arabs|palestinians|jews|israelis|leftists|rightists|republicans|democrats|liberals|conservatives)\b/gi, (match) => {
     const group = match.replace(/(?:the|all) /i, "").toLowerCase();
     return `some ${group}`;
@@ -960,6 +1053,10 @@ async function rephraseForDeEscalation(text) {
   rephrased = rephrased.replace(/\ball (?:of them|of you|people)\b/gi, "some people");
   rephrased = rephrased.replace(/\bevery(?:one|body)\b/gi, "many people");
   rephrased = rephrased.replace(/\b(?:they all|you all)\b/gi, "some people");
+  
+  // Transform dismissive statements about groups - handle AFTER group transformation
+  rephrased = rephrased.replace(/\b(some (?:people on the (?:left|right)|lefties?|righties?|libs?|conservatives?|people|leftists?|rightists?|arabs?|palestinians?|jews?|israelis?)) (?:have no idea|don't understand|don't get it|don't know)\b/gi, "$1 might not fully understand");
+  rephrased = rephrased.replace(/\b(some (?:people on the (?:left|right)|lefties?|righties?|libs?|conservatives?|people|leftists?|rightists?|arabs?|palestinians?|jews?|israelis?)) (?:have no|have zero) (?:idea|clue|understanding)\b/gi, "$1 might not fully understand");
   
   // STEP 6: Replace categorical/absolute words with nuanced language
   // Note: Don't replace "always" and "never" if they were already part of a transformation above
@@ -1005,6 +1102,13 @@ async function rephraseForDeEscalation(text) {
   // STEP 12: Capitalize first letter
   if (rephrased.length > 0) {
     rephrased = rephrased.charAt(0).toUpperCase() + rephrased.slice(1);
+  }
+  
+  // Check if rephrasing actually changed anything (excluding case changes and added prefixes)
+  const rephrasedForComparison = rephrased.trim().toLowerCase().replace(/^(in my view,?|i think |i see )/i, '').trim();
+  if (rephrasedForComparison === originalTextForComparison || rephrasedForComparison.length === 0) {
+    console.warn('⚠️ Pattern matching failed to transform text, returning null to trigger error message');
+    return null; // Return null so error message is shown instead of showing unchanged text
   }
   
   return rephrased;
@@ -1843,14 +1947,24 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   `;
   document.body.appendChild(tooltip);
   
-  // Position tooltip near the target element
-  if (targetElement) {
+  // Function to update tooltip position based on target element
+  const updateTooltipPosition = () => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/129f1d44-820f-4581-af24-9711702125a2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'content.js:1847',message:'updateTooltipPosition called',data:{hasTargetElement:!!targetElement,hasTooltip:!!tooltip,tooltipInDOM:tooltip?.parentNode?true:false},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    if (!targetElement || !tooltip.parentNode) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/129f1d44-820f-4581-af24-9711702125a2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'content.js:1850',message:'Early return in updateTooltipPosition',data:{hasTargetElement:!!targetElement,hasTooltip:!!tooltip,tooltipInDOM:tooltip?.parentNode?true:false},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      return;
+    }
+    
     const rect = targetElement.getBoundingClientRect();
     const tooltipRect = tooltip.getBoundingClientRect();
     
-    // Position below the element with some spacing
-    let top = rect.bottom + window.scrollY + 10;
-    let left = rect.left + window.scrollX;
+    // Position below the element with some spacing (using viewport coordinates for fixed positioning)
+    let top = rect.bottom + 10;
+    let left = rect.left;
     
     // Ensure tooltip doesn't go off-screen
     const viewportWidth = window.innerWidth;
@@ -1862,18 +1976,69 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     }
     
     // If tooltip goes below viewport, position it above the element instead
-    if (top + tooltipRect.height > viewportHeight + window.scrollY) {
-      top = rect.top + window.scrollY - tooltipRect.height - 10;
+    if (top + tooltipRect.height > viewportHeight) {
+      top = rect.top - tooltipRect.height - 10;
     }
     
-    // Ensure minimum left position
+    // Ensure minimum positions
     if (left < 10) {
       left = 10;
     }
+    if (top < 10) {
+      top = 10;
+    }
     
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/129f1d44-820f-4581-af24-9711702125a2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'content.js:1880',message:'Setting tooltip position',data:{top,left,rectTop:rect.top,rectBottom:rect.bottom,rectLeft:rect.left,scrollY:window.scrollY},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     tooltip.style.top = `${top}px`;
     tooltip.style.left = `${left}px`;
+  };
+  
+  // Position tooltip initially
+  updateTooltipPosition();
+  
+  // Update position on scroll and resize to keep it attached to the element
+  const positionUpdateHandler = () => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/129f1d44-820f-4581-af24-9711702125a2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'content.js:1887',message:'Scroll/resize handler fired',data:{scrollY:window.scrollY,scrollX:window.scrollX},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
+    updateTooltipPosition();
+  };
+  
+  // Use passive listeners for better scroll performance
+  window.addEventListener('scroll', positionUpdateHandler, { passive: true, capture: true });
+  window.addEventListener('resize', positionUpdateHandler, { passive: true });
+  
+  // Also listen for scroll on document (in case scroll happens on document element)
+  document.addEventListener('scroll', positionUpdateHandler, { passive: true, capture: true });
+  
+  // Listen for scroll on document.documentElement as well (some browsers)
+  if (document.documentElement) {
+    document.documentElement.addEventListener('scroll', positionUpdateHandler, { passive: true, capture: true });
   }
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/129f1d44-820f-4581-af24-9711702125a2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'content.js:1893',message:'Event listeners added',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+  // #endregion
+  
+  // Store cleanup function on tooltip element for later cleanup
+  tooltip._cleanupPositionHandlers = () => {
+    window.removeEventListener('scroll', positionUpdateHandler, { capture: true });
+    window.removeEventListener('resize', positionUpdateHandler);
+    document.removeEventListener('scroll', positionUpdateHandler, { capture: true });
+    if (document.documentElement) {
+      document.documentElement.removeEventListener('scroll', positionUpdateHandler, { capture: true });
+    }
+  };
+  
+  // Override remove method to clean up listeners
+  const originalRemove = tooltip.remove.bind(tooltip);
+  tooltip.remove = function() {
+    if (tooltip._cleanupPositionHandlers) {
+      tooltip._cleanupPositionHandlers();
+    }
+    originalRemove();
+  };
 
   // Generate rephrased version (async - may call API)
   let rephrasedText;
@@ -1946,15 +2111,19 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   }
 
   // Add event listeners for buttons - ensure they're always accessible
-  const dismissBtn = document.getElementById("dismissBtn");
-  const rephraseBtnElement = document.getElementById("rephraseBtn");
+  // Use tooltip.querySelector instead of document.getElementById to ensure we get the button from THIS tooltip
+  const dismissBtn = tooltip.querySelector("#dismissBtn");
+  const rephraseBtnElement = tooltip.querySelector("#rephraseBtn");
   
   if (!dismissBtn || !rephraseBtnElement) {
     console.error("❌ Buttons not found in tooltip!");
     return;
   }
   
-  dismissBtn.onclick = () => {
+  // Use addEventListener for better compatibility and event handling
+  dismissBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
     // Log that user dismissed the suggestion
     logInteraction({
       usersOriginalContent: originalText,
@@ -1963,8 +2132,10 @@ async function createEscalationTooltip(originalText, element, escalationType = '
       escalationType
     });
     
-    tooltip.remove();
-  };
+    if (tooltip && tooltip.parentNode) {
+      tooltip.remove();
+    }
+  }, { once: true });
 
   rephraseBtnElement.onclick = () => {
     console.log("🔄 Rephrasing text...");
