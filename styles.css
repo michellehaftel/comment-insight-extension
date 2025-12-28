@@ -7,6 +7,15 @@
   /* Position will be set dynamically via JavaScript based on element location */
 }
 
+/* Success tooltip wrapper - separate from escalation tooltip to avoid conflicts */
+.success-tooltip {
+  position: fixed;
+  z-index: 9999;
+  max-width: 400px;
+  animation: slideIn 0.3s ease-out;
+  /* Position will be set dynamically via JavaScript based on element location */
+}
+
 /* Tooltip container (inner wrapper) */
 .tooltip-container {
   display: block;

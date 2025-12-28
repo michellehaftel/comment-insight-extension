@@ -1802,7 +1802,7 @@ function showSuccessTooltip(element) {
   const randomMessage = encouragingMessages[Math.floor(Math.random() * encouragingMessages.length)];
   
   const successTooltip = document.createElement("div");
-  successTooltip.className = "escalation-tooltip success-tooltip";
+  successTooltip.className = "success-tooltip"; // Use different class to avoid conflict with escalation tooltip
   successTooltip.innerHTML = `
     <div class="tooltip-container">
       <div class="tooltip-content success-content">
@@ -1818,7 +1818,13 @@ function showSuccessTooltip(element) {
       </div>
     </div>
   `;
+  console.log("✅ Success tooltip created, adding to DOM");
   document.body.appendChild(successTooltip);
+  console.log("✅ Success tooltip added to DOM, checking if visible:", {
+    inDOM: successTooltip.parentNode !== null,
+    className: successTooltip.className,
+    display: window.getComputedStyle(successTooltip).display
+  });
   
   // Position tooltip near the element
   if (element) {
@@ -1850,16 +1856,26 @@ function showSuccessTooltip(element) {
     
     successTooltip.style.top = `${top}px`;
     successTooltip.style.left = `${left}px`;
+    console.log("📍 Success tooltip positioned at:", { top, left, viewportWidth: window.innerWidth, viewportHeight: window.innerHeight });
+  } else {
+    console.warn("⚠️ No element provided for positioning, tooltip may not be visible");
   }
+  
+  console.log("⏰ Success tooltip will auto-dismiss in 2.5 seconds");
   
   // Auto-dismiss after 2.5 seconds
   setTimeout(() => {
+    console.log("⏰ Auto-dismiss timeout triggered");
     if (successTooltip && successTooltip.parentNode) {
+      console.log("🗑️ Fading out success tooltip");
       successTooltip.style.opacity = '0';
       successTooltip.style.transition = 'opacity 0.3s ease-out';
       setTimeout(() => {
         successTooltip.remove();
+        console.log("🗑️ Success tooltip removed from DOM");
       }, 300);
+    } else {
+      console.warn("⚠️ Success tooltip already removed or not in DOM");
     }
   }, 2500);
 }
@@ -1887,8 +1903,8 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     generating: "⏳ Generating rephrasing suggestion..."
   };
 
-  // Store the element reference - use the one passed in, or try to find it
-  let targetElement = element;
+  // Store the element reference - use the one passed in, or try currentElementBeingChecked, or try to find it
+  let targetElement = element || currentElementBeingChecked;
   
   // If no element passed, try to find the active/focused element
   if (!targetElement) {
@@ -1913,6 +1929,21 @@ async function createEscalationTooltip(originalText, element, escalationType = '
         if (!targetElement || targetElement.contentEditable !== 'true') {
           targetElement = allEditable[allEditable.length - 1];
         }
+      }
+    }
+  }
+  
+  // Final fallback: if we still don't have a target, try to find it by text content again
+  // This helps for replies where the element might have changed
+  if (!targetElement || !targetElement.isConnected) {
+    console.log("⚠️ Target element not found or disconnected, searching by text content...");
+    const allEditable = document.querySelectorAll('[contenteditable="true"], textarea, [role="textbox"]');
+    for (let el of allEditable) {
+      const elText = getTextContent(el);
+      if (elText === originalText || elText.includes(originalText.substring(0, Math.min(20, originalText.length)))) {
+        targetElement = el;
+        console.log("✅ Found target element by text matching:", el);
+        break;
       }
     }
   }
@@ -2143,12 +2174,38 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     console.log("Rephrased:", rephrasedText);
     
     // Store element reference and editability state BEFORE any changes
-    const elementToRephrase = targetElement;
+    // Try multiple sources to find the element (important for replies where element might change)
+    let elementToRephrase = targetElement || currentElementBeingChecked;
+    
+    // If element is not found or disconnected, try to find it by text content
+    // This is crucial for replies where the DOM might have changed
+    if (!elementToRephrase || !elementToRephrase.isConnected) {
+      console.log("⚠️ Stored element not found or disconnected, searching for element by text...");
+      const allEditable = document.querySelectorAll('[contenteditable="true"], textarea, [role="textbox"]');
+      for (let el of allEditable) {
+        const elText = getTextContent(el);
+        // Match if text is exactly the same or contains the original text
+        if (elText === originalText || elText.includes(originalText.substring(0, Math.min(20, originalText.length)))) {
+          elementToRephrase = el;
+          console.log("✅ Found element by text matching:", el);
+          break;
+        }
+      }
+    }
+    
     if (!elementToRephrase) {
       console.error("❌ No target element found for rephrasing");
       tooltip.remove();
       return;
     }
+    
+    console.log("🎯 Using element for rephrasing:", {
+      tag: elementToRephrase.tagName,
+      contentEditable: elementToRephrase.contentEditable,
+      role: elementToRephrase.getAttribute('role'),
+      isConnected: elementToRephrase.isConnected,
+      currentText: getTextContent(elementToRephrase).substring(0, 50)
+    });
     
     // Preserve original editability state
     const originalContentEditable = elementToRephrase.contentEditable;
@@ -2205,11 +2262,20 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     forceEditability();
     
     if (success) {
+      console.log("🔍 replaceTextInElement returned success=true, will verify text replacement...");
       // Verify the text was actually replaced and re-enable editing
       setTimeout(() => {
         const verifyText = getTextContent(elementToRephrase);
         const wasReplaced = verifyText.trim() === rephrasedText.trim() || 
                            verifyText.includes(rephrasedText.substring(0, 15));
+        
+        console.log("🔍 Verification check:", {
+          verifyText: verifyText.substring(0, 50),
+          expectedText: rephrasedText.substring(0, 50),
+          wasReplaced: wasReplaced,
+          exactMatch: verifyText.trim() === rephrasedText.trim(),
+          substringMatch: verifyText.includes(rephrasedText.substring(0, 15))
+        });
         
         if (wasReplaced) {
           console.log("✅ Text successfully rephrased! New text:", verifyText);
@@ -2223,6 +2289,7 @@ async function createEscalationTooltip(originalText, element, escalationType = '
           });
           
           // Show "Good job!" tooltip
+          console.log("🎉 Calling showSuccessTooltip with element:", elementToRephrase);
           showSuccessTooltip(elementToRephrase);
           
           // Force editability again after text replacement
@@ -2357,7 +2424,7 @@ async function createEscalationTooltip(originalText, element, escalationType = '
         }
       }, 100); // Reduced timeout for faster response
     } else {
-      console.error("❌ Failed to replace text");
+      console.error("❌ replaceTextInElement returned success=false");
       justRephrased = false; // Reset if failed
     }
   };
