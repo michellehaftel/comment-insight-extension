@@ -222,10 +222,13 @@ function hasHighRiskKeywords(text) {
     "you never",
     "i hate",
     "i can't stand",
+    "i can't believe", // Dismissive/judging
     "this is insane",
     "shut up",
     "this makes me sick",
     "worst",
+    "worst mistake",
+    "worst thing",
     "stupid",
     "dumb",
     "idiot",
@@ -234,24 +237,97 @@ function hasHighRiskKeywords(text) {
     "asshole",
     "hate",
     "disgusting",
+    "disgusting creature",
     "ridiculous",
     "brainwashed",
     "never work",
     "will never",
     "anyone who supports",
+    "everything that is bad",
+    "everything that is wrong",
+    "what a stupid",
+    "what a disgusting",
+    "what a terrible",
     "once", // Catch "once X, always X" patterns
     "always an", // Part of "always an asshole" pattern
     "forever"
   ];
-  return keywordList.some((kw) => lowercase.includes(kw));
+  
+  // Profanity/cursing detection - high risk keywords
+  const profanityKeywords = [
+    "fuck", "fucking", "fucked", "fucker", "fucks",
+    "shit", "shitting", "shitted", "shits", "shitty",
+    "damn", "damned", "damnit", "dammit",
+    "hell", "hellish",
+    "bitch", "bitches", "bitching",
+    "bastard", "bastards",
+    "crap", "crappy",
+    "piss", "pissed", "pissing",
+    "cunt", "cunts",
+    "dick", "dicks", "dickhead",
+    "prick", "pricks",
+    "cock", "cocks",
+    "asshole", "assholes",
+    "bitch", "bitches",
+    "motherfucker", "motherfuckers", "motherfucking",
+    "son of a bitch", "sob",
+    "goddamn", "goddamnit",
+    "bloody hell",
+    "bullshit", "bullshit",
+    "crap",
+    "piss off",
+    "screw you", "screw off",
+    "f off", // Euphemism
+    "screw",
+    "piss",
+    "damn you",
+    "go to hell"
+  ];
+  
+  // Check for profanity - these are always high risk
+  // Use word boundaries to avoid false positives (e.g., "cockroach" matching "cock", "dismiss" matching "miss")
+  // For multi-word phrases like "son of a bitch", use phrase matching with word boundaries at start/end
+  const profanityPatterns = profanityKeywords.map(kw => {
+    // Multi-word phrases need special handling (word boundaries only at start and end)
+    if (kw.includes(' ')) {
+      // For phrases, escape special regex chars and match as phrase with word boundaries
+      const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`\\b${escaped}\\b`, 'i');
+    } else {
+      // Single words use word boundaries on both sides
+      const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`\\b${escaped}\\b`, 'i');
+    }
+  });
+  
+  if (profanityPatterns.some(pattern => pattern.test(text))) {
+    return true;
+  }
+  
+  // Check regular keywords with word boundaries to avoid false positives
+  const keywordPatterns = keywordList.map(kw => {
+    // Multi-word phrases
+    if (kw.includes(' ')) {
+      const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`\\b${escaped}\\b`, 'i');
+    } else {
+      const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`\\b${escaped}\\b`, 'i');
+    }
+  });
+  
+  return keywordPatterns.some(pattern => pattern.test(text));
 }
 
 /**
  * Detect if text contains Hebrew characters
+ * DISABLED: Hebrew support is currently deactivated
  */
 function containsHebrew(text) {
   // Hebrew Unicode range: \u0590-\u05FF
-  return /[\u0590-\u05FF]/.test(text);
+  // DISABLED: Always return false to disable Hebrew support
+  return false;
+  // return /[\u0590-\u05FF]/.test(text);
 }
 
 /**
@@ -270,14 +346,16 @@ function isEscalating(text) {
     return { isEscalatory: false, escalationType: 'none' };
   }
 
+  // DISABLED: Hebrew support is currently deactivated
   // If text contains Hebrew or other non-Latin characters, and API is enabled,
   // we should use API-based detection (but for now, allow it through for API check)
   const hasNonLatin = containsNonLatin(trimmedText);
-  const hasHebrew = containsHebrew(trimmedText);
+  const hasHebrew = false; // DISABLED: containsHebrew(trimmedText);
   
+  // DISABLED: Hebrew special handling
   // For non-English text (especially Hebrew), we rely on API for detection
   // So we return a moderate escalation score to trigger API check
-  if (hasHebrew || (hasNonLatin && USE_API)) {
+  if (false && (hasHebrew || (hasNonLatin && USE_API))) {
     // If we have substantial text in Hebrew, assume it might be escalatory
     // and let the API do the real detection
     if (trimmedText.length >= 10) {
@@ -428,9 +506,33 @@ function isEscalating(text) {
 
   // 4. Judging/condemning language
   const judgingPatterns = [
+    // Basic "you are/you're [negative adjective]"
     /\b(you're (?:terrible|awful|horrible|disgusting|pathetic|ridiculous|stupid|dumb|an idiot|a moron|an ass|an asshole))\b/i,
     /\b(you are such a (?:dumb (?:ass|asshole)|idiot|moron|jerk|fool|terrible|awful|horrible|disgusting|pathetic|ridiculous|stupid))\b/i, // "you are such a dumb ass", "you are such a idiot", etc.
     /\b(you are (?:so |such )?(?:terrible|awful|horrible|disgusting|pathetic|ridiculous|stupid|dumb(?:ass| ass)?|idiot|moron|ass(?:hole)?|jerk|fool))\b/i, // "you are so stupid", "you are dumb", etc.
+    
+    // "You are [article] [adjective] [noun]" patterns (e.g., "you are a disgusting creature", "you are the worst mistake")
+    /\b(you are (?:a|an|the) (?:disgusting|terrible|awful|horrible|pathetic|ridiculous|stupid|dumb|worst|bad|worst|vile|repulsive|despicable|contemptible) (?:creature|mistake|person|human|thing|being|scum|filth|waste|joke|disgrace|shame|failure|monster|beast|animal))\b/i,
+    
+    // "You are such a [negative noun]" patterns (e.g., "you are such a mistake", "you are such a failure")
+    /\b(you are such a (?:mistake|failure|disgrace|shame|joke|monster|beast|animal|creature|scum|filth|waste|disaster|tragedy|nightmare|curse|plague|burden|problem|issue|threat|danger|liability))\b/i,
+    
+    // "You are [a/an/the] [negative noun]" patterns without adjective (e.g., "you are a mistake", "you are the problem")
+    /\b(you are (?:a|an|the) (?:mistake|failure|disgrace|shame|joke|monster|beast|animal|creature|scum|filth|waste|disaster|tragedy|nightmare|curse|plague|burden|problem|issue|threat|danger|liability|embarrassment|disappointment|fraud|fake|imposter|hypocrite|coward|traitor|enemy|foe|opponent|adversary|villain|criminal|evil|poison|disease|cancer|virus|pest|parasite|leech|freeloader))\b/i,
+    
+    // "You are everything that is [negative]"
+    /\b(you are everything (?:that is|which is) (?:bad|wrong|evil|terrible|awful|horrible|disgusting|pathetic|ridiculous|stupid|wrong with|terrible about))\b/i,
+    
+    // "You are [the/your/a] worst [noun]" patterns
+    /\b(you are (?:the|your|a) worst (?:mistake|thing|person|human|decision|choice|example|representation|embodiment|excuse|reason|excuse|excuse for|joke|disgrace|shame|failure))\b/i,
+    
+    // "What a [adjective] [noun]" condescending patterns
+    /\b(what a (?:stupid|disgusting|terrible|awful|horrible|pathetic|ridiculous|dumb|idiotic|vile|repulsive|despicable|contemptible) (?:human|person|creature|thing|joke|disgrace|shame|failure|mistake|being|monster|beast|animal|idiot|moron|fool|jerk))\b/i,
+    
+    // "I can't believe" dismissive/judging patterns
+    /\b(i (?:can't|cannot) believe (?:you|that) (?:are|were|would|still|actually|really))\b/i,
+    
+    // Other judging patterns
     /\b(that's (?:terrible|awful|horrible|disgusting|pathetic|ridiculous|stupid|dumb|idiotic))\b/i,
     /\b(how (?:dare|could) you)\b/i,
     /\b(you should (?:be ashamed|feel bad|know better))\b/i,
@@ -448,6 +550,124 @@ function isEscalating(text) {
       reasons.push("Judging/condemning language");
     }
   });
+
+  // 4.5. Profanity/cursing detection - HIGH ESCALATION RISK
+  // Only flag profanity in negative/neutral contexts, NOT positive contexts
+  // Based on: https://en.wiktionary.org/wiki/Category:English_swear_words
+  
+  // Comprehensive list of curse words from Wiktionary
+  const curseWords = [
+    // F-words
+    'fuck', 'fucking', 'fucked', 'fucker', 'fucks',
+    // S-words
+    'shit', 'shitting', 'shitted', 'shits', 'shitty', 'shite',
+    // D-words
+    'damn', 'damned', 'damnit', 'dammit', 'goddamn', 'goddamnit', 'goddamned', 'godsdamn',
+    // Other strong profanity
+    'hell', 'hellish', 'bitch', 'bitches', 'bitching', 'bastard', 'bastards',
+    'cunt', 'cunts', 'dick', 'dicks', 'dickhead', 'dick-head', 'prick', 'pricks',
+    'cock', 'cocks', 'cocksucker', 'motherfucker', 'motherfuckers', 'motherfucking', 'mother-fucker',
+    'bullshit', 'horseshit', 'piss', 'pissing', 'pissed', 'wanker', 'twat',
+    'arse', 'arsehead', 'arsehole', 'arseholes', 'ass', 'asshole', 'assholes', 'arsehead',
+    'bugger', 'bollocks', 'crap', 'dumb-ass', 'dumbass', 'jack-ass', 'jackass', 'jackarse',
+    // Slurs and offensive terms (always escalatory)
+    'fag', 'faggot', 'dyke', 'kike', 'tranny', 'slut', 'spastic',
+    'nigga', 'nigra',
+    // Compound curse words
+    'child-fucker', 'father-fucker', 'fatherfucker', 'brotherfucker', 'sisterfuck', 'sisterfucker',
+    'pigfucker'
+  ];
+  
+  // Negative context words that make profanity escalatory
+  const negativeWords = /\b(?:ridiculous|terrible|awful|horrible|stupid|idiotic|disgusting|pathetic|wrong|bad|worse|worst|hate|hated|annoying|frustrating|useless|pointless|garbage|trash|crazy|insane|dumb|absurd|nonsense|idiot|moron|jerk|fool|disgusting|hateful|offensive)\b/i;
+  
+  // Positive context words - profanity here is NOT escalatory
+  const positiveWords = /\b(?:amazing|great|awesome|fantastic|wonderful|excellent|incredible|beautiful|good|best|love|loved|perfect|brilliant|outstanding|superb|phenomenal|marvelous|lovely|nice|sweet|cool|nice|sweet)\b/i;
+  
+  // Build regex patterns for profanity in negative context
+  const profanityNegativePatterns = curseWords.flatMap(curse => [
+    new RegExp(`\\b(?:${curse})\\s+${negativeWords.source}`, 'i'),
+    new RegExp(`${negativeWords.source}\\s+(?:${curse})\\b`, 'i') // Also catch "ridiculous fucking"
+  ]);
+  
+  // Track which curse words were already matched to avoid double-counting
+  const matchedCurseWords = new Set();
+  
+  // Check for profanity in negative context - VERY HIGH escalation
+  profanityNegativePatterns.forEach(pattern => {
+    if (pattern.test(trimmedText)) {
+      escalationScore += 4;
+      reasons.push("Profanity in negative context detected");
+      // Mark all curse words as matched since negative patterns include all curse words
+      curseWords.forEach(curse => matchedCurseWords.add(curse.toLowerCase()));
+    }
+  });
+  
+  // Check if profanity is used in positive context - if so, don't flag it
+  const hasPositiveProfanity = curseWords.some(curse => {
+    const positivePattern = new RegExp(`\\b(?:${curse})\\s+${positiveWords.source}`, 'i');
+    return positivePattern.test(trimmedText);
+  });
+  
+  const hasNegativeProfanity = matchedCurseWords.size > 0;
+  
+  // Direct profanity/insults (always escalatory regardless of context)
+  // BUT: Skip if already counted in negative context patterns to avoid double-counting
+  const directProfanityPatterns = [
+    // Direct attacks
+    /\b(?:fuck (?:you|off|this|that|it|him|her|them|yourself))\b/i,
+    /\b(?:fucker|fucked up)\b/i,
+    /\b(?:piss (?:off|you))\b/i,
+    /\b(?:screw (?:you|off))\b/i,
+    /\b(?:go to hell)\b/i,
+    /\b(?:damn you)\b/i,
+    // Insulting terms
+    /\b(?:bitch|bitches|bitching)\b/i,
+    /\b(?:bastard|bastards)\b/i,
+    /\b(?:cunt|cunts)\b/i,
+    /\b(?:dickhead|dick-head)\b/i,
+    /\b(?:motherfucker|motherfuckers|motherfucking|mother-fucker)\b/i,
+    /\b(?:son of a bitch|sob)\b/i,
+    /\b(?:bullshit|horseshit)\b/i,
+    /\b(?:arsehole|arseholes|asshole|assholes)\b/i,
+    // Slurs
+    /\b(?:fag|faggot|dyke|kike|tranny|slut|spastic)\b/i,
+    /\b(?:nigga|nigra)\b/i,
+    // Euphemisms
+    /\b(?:f off|f\*\*\*)\b/i,
+    /\b(?:s\*\*\*)\b/i
+  ];
+  
+  // Only check direct patterns if negative profanity wasn't already detected
+  // This prevents double-counting: if "fucking ridiculous" matched negative pattern (+4),
+  // we shouldn't also add points for the "fucking" word itself
+  if (!hasNegativeProfanity) {
+    directProfanityPatterns.forEach(pattern => {
+      if (pattern.test(trimmedText)) {
+        escalationScore += 3;
+        reasons.push("Profanity/cursing detected");
+        // Extract and mark matched curse words from direct patterns
+        const match = trimmedText.match(pattern);
+        if (match) {
+          curseWords.forEach(curse => {
+            if (match[0].toLowerCase().includes(curse.toLowerCase())) {
+              matchedCurseWords.add(curse.toLowerCase());
+            }
+          });
+        }
+      }
+    });
+  }
+  
+  // Standalone profanity words (only if not in positive context and not already matched)
+  if (!hasPositiveProfanity && !hasNegativeProfanity && matchedCurseWords.size === 0) {
+    // Create regex for all standalone curse words
+    const standalonePattern = new RegExp(`\\b(?:${curseWords.join('|')})\\b`, 'i');
+    if (standalonePattern.test(trimmedText)) {
+      escalationScore += 2.5;
+      reasons.push("Profanity detected");
+    }
+  }
 
   // 5. "They" accusative statements (blaming groups)
   const theyBlamePatterns = [
@@ -657,11 +877,11 @@ function checkForEscalation(element) {
  * Call proxy server to rephrase text using ECPM prompt
  * API key is handled server-side by the proxy
  */
-async function rephraseViaAPI(text) {
+async function rephraseViaAPI(text, context = null) {
   try {
     // Check if API is enabled and config is available
     if (typeof USE_API === 'undefined' || !USE_API) {
-      console.log('⚠️ API is disabled, using fallback rephrasing');
+      console.log('⚠️ API is disabled');
       return null;
     }
     
@@ -676,14 +896,24 @@ async function rephraseViaAPI(text) {
       return null;
     }
     
+    // Get post context if not provided
+    if (!context) {
+      context = getPostContext();
+    }
+    
     // Prepare request to proxy server
     const requestBody = {
       text: text,
+      context: {
+        originalPostContent: context.originalPostContent || '',
+        originalPostWriter: context.originalPostWriter || '',
+        isReply: context.isReply || false
+      },
       model: API_CONFIG.model || 'gpt-4o',
       temperature: API_CONFIG.temperature || 1.0,
       max_tokens: API_CONFIG.max_tokens || 2048,
       top_p: API_CONFIG.top_p || 1.0,
-      prompt: ECPM_PROMPT // Send the full prompt template (proxy will replace {TEXT})
+      prompt: ECPM_PROMPT // Send the full prompt template (proxy will replace {TEXT} and {CONTEXT})
     };
     
     console.log('🤖 Calling proxy server for rephrasing...');
@@ -757,18 +987,38 @@ async function rephraseViaAPI(text) {
     console.log('📥 Proxy server response received');
     console.log('📄 Response keys:', Object.keys(parsed || {}));
     
+    // Log context understanding if available
+    if (parsed.why?.contextUnderstanding) {
+      console.log('🧠 AI Context Understanding:', {
+        detectedContext: parsed.why.contextUnderstanding.detectedContext || 'Not provided',
+        relationships: parsed.why.contextUnderstanding.identifiedRelationships || 'Not provided',
+        contextualRelevance: parsed.why.contextUnderstanding.contextualRelevance || 'Not provided',
+        contextSufficiency: parsed.why.contextUnderstanding.contextSufficiency || 'Not provided'
+      });
+    } else if (parsed.why?.contextConsideration) {
+      console.log('📝 Context Consideration:', parsed.why.contextConsideration);
+    }
+    
     // Parse JSON response
     if (parsed) {
       try {
         console.log('✅ Successfully received response from proxy:', parsed);
         
         // Extract rephrased text
-        if (parsed && parsed.rephrasedText) {
+        // Check if the field exists (even if null) - null means text is already de-escalatory
+        if (parsed && 'rephrasedText' in parsed) {
+          // If rephrasedText is null, the text is already de-escalatory
+          if (parsed.rephrasedText === null) {
+            console.log('ℹ️ Text is already de-escalatory, no rephrasing needed');
+            return null;
+          }
+          
           let rephrased = parsed.rephrasedText.trim();
           
+          // DISABLED: Hebrew support is currently deactivated
           // If original text was Hebrew, ensure rephrased text is entirely in Hebrew
           // VERY AGGRESSIVE cleanup to remove all English
-          if (containsHebrew(text)) {
+          if (false && containsHebrew(text)) {
             console.log('🔍 Original Hebrew text detected, cleaning response...');
             console.log('📝 Original rephrased text:', rephrased);
             
@@ -888,16 +1138,16 @@ async function rephraseViaAPI(text) {
           console.log('📊 Full response:', {
             riskLevel: parsed.riskLevel,
             escalationType: parsed.escalationType,
-            rephrasedLength: rephrased.length,
-            containsHebrew: containsHebrew(rephrased),
-            originalWasHebrew: containsHebrew(text)
+            rephrasedLength: rephrased.length
+            // DISABLED: Hebrew support - removed Hebrew detection from logging
+            // containsHebrew: containsHebrew(rephrased),
+            // originalWasHebrew: containsHebrew(text)
           });
           return rephrased;
-        } else if (parsed && parsed.isEscalatory === false) {
-          console.log('ℹ️ Text is already de-escalatory, no rephrasing needed');
-          return null;
         } else {
-          console.warn('⚠️ Proxy response missing rephrasedText:', parsed);
+          // rephrasedText field doesn't exist in response - this is an error
+          console.warn('⚠️ Proxy response missing rephrasedText field:', parsed);
+          console.warn('📋 Response structure:', JSON.stringify(parsed, null, 2));
           return null;
         }
       } catch (parseError) {
@@ -915,203 +1165,21 @@ async function rephraseViaAPI(text) {
 }
 
 /**
- * Rephrase text using ECPM de-escalation strategies:
- * 1. Transform "you are X" statements into "I" statements expressing personal perspective
- * 2. Replace absolute truths with subjective statements
- * 3. Replace blame statements with self-accountability
- * 4. Replace generalized statements with specific, personal ones
- * 5. Replace judging language with feelings and observations
- * 
- * If USE_API is true, this will call the OpenAI API. Otherwise, uses pattern matching.
+ * Rephrase text using ECPM de-escalation strategies via Gemini API.
+ * No fallback - if API fails or is disabled, returns null to show error message.
  */
 async function rephraseForDeEscalation(text) {
-  // Try API first if enabled
+  // Only use API - no fallback to pattern matching
   if (typeof USE_API !== 'undefined' && USE_API) {
-    const apiResult = await rephraseViaAPI(text);
-    if (apiResult) {
-      return apiResult;
-    }
-    // Fallback to pattern matching if API fails
-    console.log('⚠️ API rephrasing failed, falling back to pattern matching');
+    // Get context about the post/comment being replied to
+    const context = getPostContext();
+    const apiResult = await rephraseViaAPI(text, context);
+    return apiResult; // Return null if API fails, don't fallback
   }
   
-  // Fallback: Pattern matching rephrasing (original implementation)
-  let rephrased = text;
-  
-  // Store original for comparison - if nothing changes, return null to trigger error message
-  const originalTextForComparison = text.trim().toLowerCase();
-  
-  // STEP 1: Deep transformations - "you are X" → "I feel/think/observe..."
-  // These catch common accusatory patterns and transform them completely
-  
-  // "You are [always/never/often/...] wrong" → "I often disagree with you" or "I often disagree with your perspective"
-  rephrased = rephrased.replace(/\b(?:you are|you're) (?:always|often|never|rarely|so|just|totally|completely|absolutely) wrong\b/gi, "I often disagree with your perspective");
-  rephrased = rephrased.replace(/\b(?:you are|you're) wrong\b/gi, "I see it differently");
-  
-  // "You are [always/never] [verb]ing" → "I notice that you sometimes/rarely [verb]"
-  rephrased = rephrased.replace(/\b(?:you are|you're) always (\w+ing)\b/gi, "I notice you sometimes $1");
-  rephrased = rephrased.replace(/\b(?:you are|you're) never (\w+ing)\b/gi, "I notice you rarely $1");
-  
-  // "You are [negative adjective]" → "I'm having difficulty with this"
-  rephrased = rephrased.replace(/\b(?:you are|you're) (?:terrible|awful|horrible|disgusting|pathetic|ridiculous|stupid|dumb|mean|cruel|selfish)\b/gi, "I'm having a strong reaction to this");
-  
-  // STEP 2: Transform "you [verb]" accusatory statements to "I" statements
-  
-  // "You always/never [verb]" → "I often/rarely notice that you [verb]"
-  rephrased = rephrased.replace(/\byou always ([\w\s]+?)(?=\.|!|,|$)/gi, "I often notice $1");
-  rephrased = rephrased.replace(/\byou never ([\w\s]+?)(?=\.|!|,|$)/gi, "I rarely see $1");
-  
-  // "You make me" → "I feel"
-  rephrased = rephrased.replace(/\byou (?:make|made) me (feel )?([\w\s]+?)(?=\.|!|,|$)/gi, "I feel $2");
-  
-  // General "you [negative action]" → "I observe/notice"
-  rephrased = rephrased.replace(/\byou (ignore|dismiss|attack|criticize|belittle|mock|insult)/gi, "I feel $1d");
-  
-  // STEP 3: Absolute truth statements → subjective statements
-  rephrased = rephrased.replace(/\b(?:i am|i'm) right\b/gi, "I believe this");
-  rephrased = rephrased.replace(/\b(?:that's|that is) (?:not true|false|a lie)\b/gi, "I understand it differently");
-  // ECPM: Transform dismissive "you have no idea/don't know" → "I" statement with self-accountability
-  // Match "you [really] have no idea [what you are/you're talking about]" as a complete phrase
-  rephrased = rephrased.replace(/\byou (?:really )?have no idea(?: what (?:you are|you're) talking about)?/gi, "I see things differently, and I'm trying to understand your perspective");
-  rephrased = rephrased.replace(/\byou (?:really )?(?:don't understand|don't get it|don't know|have no clue)(?: what (?:you are|you're) talking about)?/gi, "I see things differently, and I'm trying to understand your perspective");
-  rephrased = rephrased.replace(/\b(?:you don't|you do not) (?:understand|get it|know)\b/gi, "I'd like to share my perspective");
-  rephrased = rephrased.replace(/\b(?:that's|that is) (?:ridiculous|absurd|stupid|insane|crazy)\b/gi, "I find that challenging to understand");
-  
-  // STEP 4: Fault/blame statements → self-accountability
-  rephrased = rephrased.replace(/\b(?:this|that|it) (?:is|was) (?:absolutely|completely|totally|all) (?:your|you're) (?:fault|problem|responsibility)\b/gi, "I'm having a hard time with this");
-  rephrased = rephrased.replace(/\b(?:absolutely|completely|totally) (?:your|you're) (?:fault|problem)\b/gi, "I'm having a hard time with this");
-  rephrased = rephrased.replace(/\b(?:this|that|it) (?:is|was) (?:your|you're) (?:fault|problem|responsibility)\b/gi, "I'm finding this difficult");
-  rephrased = rephrased.replace(/\bit's (?:your|you're) (?:fault|problem|issue|responsibility)\b/gi, "I'm struggling with this");
-  rephrased = rephrased.replace(/\b(?:your|you're) (?:fault|problem|issue|responsibility)\b/gi, "I'm struggling with this");
-  
-  // STEP 5: Generalized/categorical statements → specific, personal ones (ECPM: Transform to "I" statements)
-  // Transform "you [group] have no idea/don't understand" FIRST as complete phrases
-  // ECPM requires: Replace "you/they" with "I" statements + personal perspective + self-accountability
-  rephrased = rephrased.replace(/\b(you (?:lefties?|righties?|libs?|conservatives?|republicans?|democrats?|liberals?|progressives?|leftists?|rightists?|people|guys|folks)) (?:have no idea|don't understand|don't get it|don't know|have no clue)\b/gi, (match, group) => {
-    // ECPM transformation: Transform to "I" statement with personal perspective and self-accountability
-    // Preserve meaning (disagreement/understanding gap) while removing categorical blame
-    const groupName = group.replace(/^you /i, "").toLowerCase();
-    const groupMap = {
-      'lefties': 'people on the left',
-      'leftists': 'people on the left',
-      'righties': 'people on the right',
-      'conservatives': 'conservative people',
-      'republicans': 'Republicans',
-      'democrats': 'Democrats',
-      'liberals': 'liberal people',
-      'progressives': 'progressive people',
-      'libs': 'liberal people',
-      'rightists': 'people on the right',
-      'people': 'people',
-      'guys': 'people',
-      'folks': 'people'
-    };
-    const neutralGroup = groupMap[groupName] || `some ${groupName}`;
-    // ECPM: "I" statement expressing personal perspective and self-accountability
-    return `I see things differently from some ${neutralGroup}, and I'm trying to understand their perspective`;
-  });
-  
-  // Transform "you [group]" patterns - these are the most escalatory
-  rephrased = rephrased.replace(/\b(you (?:lefties?|righties?|libs?|conservatives?|republicans?|democrats?|liberals?|progressives?|leftists?|rightists?|arabs?|palestinians?|jews?|israelis?|zionists?))\b/gi, (match) => {
-    const group = match.replace(/^you /i, "").toLowerCase();
-    // Map common group names to more neutral descriptions
-    const groupMap = {
-      'lefties': 'people on the left',
-      'leftists': 'people on the left',
-      'righties': 'people on the right',
-      'conservatives': 'conservative people',
-      'republicans': 'Republicans',
-      'democrats': 'Democrats',
-      'liberals': 'liberal people',
-      'progressives': 'progressive people',
-      'libs': 'liberal people',
-      'rightists': 'people on the right',
-      'arabs': 'Arab people',
-      'palestinians': 'Palestinians',
-      'jews': 'Jewish people',
-      'israelis': 'Israelis',
-      'zionists': 'Zionists'
-    };
-    const neutralGroup = groupMap[group] || `some ${group}`;
-    return `some ${neutralGroup}`;
-  });
-  
-  // Transform "you people/guys/folks [on the left/right]"
-  rephrased = rephrased.replace(/\b(you (?:people|guys|folks|ones) (?:on the (?:left|right|other side)))\b/gi, "some people on that side");
-  rephrased = rephrased.replace(/\b(you (?:left|right|liberal|conservative) (?:people|guys|folks|ones))\b/gi, (match) => {
-    const side = match.match(/\b(left|right|liberal|conservative)\b/i)?.[0]?.toLowerCase() || '';
-    if (side === 'left' || side === 'liberal') return 'some people on the left';
-    if (side === 'right' || side === 'conservative') return 'some people on the right';
-    return 'some people';
-  });
-  
-  // Transform "the [group]" or "all [group]"
-  rephrased = rephrased.replace(/\b(?:the|all) (?:arabs|palestinians|jews|israelis|leftists|rightists|republicans|democrats|liberals|conservatives)\b/gi, (match) => {
-    const group = match.replace(/(?:the|all) /i, "").toLowerCase();
-    return `some ${group}`;
-  });
-  rephrased = rephrased.replace(/\ball (?:of them|of you|people)\b/gi, "some people");
-  rephrased = rephrased.replace(/\bevery(?:one|body)\b/gi, "many people");
-  rephrased = rephrased.replace(/\b(?:they all|you all)\b/gi, "some people");
-  
-  // Transform dismissive statements about groups - handle AFTER group transformation
-  rephrased = rephrased.replace(/\b(some (?:people on the (?:left|right)|lefties?|righties?|libs?|conservatives?|people|leftists?|rightists?|arabs?|palestinians?|jews?|israelis?)) (?:have no idea|don't understand|don't get it|don't know)\b/gi, "$1 might not fully understand");
-  rephrased = rephrased.replace(/\b(some (?:people on the (?:left|right)|lefties?|righties?|libs?|conservatives?|people|leftists?|rightists?|arabs?|palestinians?|jews?|israelis?)) (?:have no|have zero) (?:idea|clue|understanding)\b/gi, "$1 might not fully understand");
-  
-  // STEP 6: Replace categorical/absolute words with nuanced language
-  // Note: Don't replace "always" and "never" if they were already part of a transformation above
-  if (!/\b(?:often|rarely|sometimes)\b/i.test(rephrased)) {
-    rephrased = rephrased.replace(/\balways\b/gi, "often");
-    rephrased = rephrased.replace(/\bnever\b/gi, "rarely");
-  }
-  rephrased = rephrased.replace(/\beveryone\b/gi, "many people");
-  rephrased = rephrased.replace(/\bnobody\b/gi, "few people");
-  rephrased = rephrased.replace(/\b(?:completely|totally|absolutely|definitely|certainly)\b/gi, "largely");
-  rephrased = rephrased.replace(/\b(?:only|solely|exclusively)\b/gi, "primarily");
-  
-  // STEP 7: Replace judging/condemning language with feelings
-  rephrased = rephrased.replace(/\b(?:how (?:dare|could) you)\b/gi, "I'm surprised by this");
-  rephrased = rephrased.replace(/\byou should (?:be ashamed|feel bad|know better)\b/gi, "I'm feeling hurt by this");
-  
-  // STEP 8: Replace dismissive language with acknowledgment
-  rephrased = rephrased.replace(/\b(?:that doesn't|that does not) (?:matter|count|make sense|work)\b/gi, "I'm not sure I understand");
-  rephrased = rephrased.replace(/\b(?:i don't|i do not) (?:care|give a|want to hear)\b/gi, "I'm having trouble engaging with this");
-  rephrased = rephrased.replace(/\b(?:whatever|who cares|so what)\b/gi, "I'm not sure how to respond");
-  
-  // STEP 9: Remove ALL exclamation marks (they add emotional intensity)
-  rephrased = rephrased.replace(/!/g, ".");
-  
-  // STEP 10: Add subjective framing if the text doesn't already have it
-  if (!/\b(?:in my|i (?:think|feel|believe|see|notice|find|observe|often|rarely))\b/i.test(rephrased)) {
-    // Only add if it's a statement, not a question
-    if (!rephrased.trim().endsWith('?')) {
-      rephrased = "In my view, " + rephrased.charAt(0).toLowerCase() + rephrased.slice(1);
-    }
-  }
-  
-  // STEP 11: Clean up punctuation - ensure proper sentence ending
-  rephrased = rephrased.replace(/\.{2,}/g, "."); // Remove multiple periods
-  rephrased = rephrased.replace(/\s+/g, " "); // Clean up extra spaces
-  rephrased = rephrased.trim();
-  
-  // Make sure it ends with a period if it doesn't have ending punctuation
-  if (!/[.?]$/.test(rephrased)) {
-    rephrased += ".";
-  }
-  
-  // STEP 12: Capitalize first letter
-  if (rephrased.length > 0) {
-    rephrased = rephrased.charAt(0).toUpperCase() + rephrased.slice(1);
-  }
-  
-  // Check if rephrasing actually changed anything (excluding case changes and added prefixes)
-  const rephrasedForComparison = rephrased.trim().toLowerCase().replace(/^(in my view,?|i think |i see )/i, '').trim();
-  if (rephrasedForComparison === originalTextForComparison || rephrasedForComparison.length === 0) {
-    console.warn('⚠️ Pattern matching failed to transform text, returning null to trigger error message');
-    return null; // Return null so error message is shown instead of showing unchanged text
-  }
-  
-  return rephrased;
+  // If API is disabled, return null (no pattern matching fallback)
+  console.log('⚠️ API is disabled');
+  return null;
 }
 
 // Replace text using the most reliable method for each platform
@@ -1885,17 +1953,12 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   const existing = document.querySelector(".escalation-tooltip");
   if (existing) existing.remove();
 
+  // DISABLED: Hebrew support is currently deactivated
   // Detect if text is in Hebrew for UI localization
-  const isHebrew = containsHebrew(originalText);
+  const isHebrew = false; // DISABLED: containsHebrew(originalText);
   
-  // Hebrew UI text
-  const uiText = isHebrew ? {
-    warning: "לתגובה/פוסט שכתבת, יש סיכוי גבוה להסלים את השיח.",
-    suggestLabel: "אופציה מעודנת לשקילה:",
-    dismiss: "בטל",
-    rephrase: "נסח מחדש",
-    generating: "מייצר הצעה..."
-  } : {
+  // DISABLED: Hebrew UI text - always use English
+  const uiText = {
     warning: "This comment/post has a high chance of escalating the conversation.",
     suggestLabel: "Consider rephrasing:",
     dismiss: "Dismiss",
@@ -1957,16 +2020,17 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   
   // Show tooltip with loading state first
   const tooltip = document.createElement("div");
-  tooltip.className = `escalation-tooltip ${isHebrew ? 'hebrew-tooltip' : ''}`;
+  // DISABLED: Hebrew support - removed hebrew-tooltip class
+  tooltip.className = `escalation-tooltip`;
   tooltip.innerHTML = `
     <div class="tooltip-container">
-      <div class="tooltip-content ${isHebrew ? 'rtl-content' : ''}">
-        <p class="tooltip-message ${isHebrew ? 'rtl-text' : ''}">${uiText.warning}</p>
-        <div class="tooltip-suggestion ${isHebrew ? 'rtl-suggestion' : ''}" style="display: none;">
-          <p class="tooltip-suggestion-label ${isHebrew ? 'rtl-text' : ''}">${uiText.suggestLabel}</p>
-          <p class="tooltip-suggestion-text ${isHebrew ? 'rtl-text' : ''}"></p>
+      <div class="tooltip-content">
+        <p class="tooltip-message">${uiText.warning}</p>
+        <div class="tooltip-suggestion" style="display: none;">
+          <p class="tooltip-suggestion-label">${uiText.suggestLabel}</p>
+          <p class="tooltip-suggestion-text"></p>
         </div>
-        <div class="tooltip-buttons ${isHebrew ? 'rtl-buttons' : ''}">
+        <div class="tooltip-buttons">
           <button id="dismissBtn" class="tooltip-btn dismiss-btn">${uiText.dismiss}</button>
           <button id="rephraseBtn" class="tooltip-btn rephrase-btn loading" disabled>
             <span class="spinner"></span>
@@ -2071,14 +2135,42 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     originalRemove();
   };
 
-  // Generate rephrased version (async - may call API)
-  let rephrasedText;
+  // Declare rephrasedText early so it's accessible in the dismiss button handler
+  let rephrasedText = '';
+
+  // IMPORTANT: Attach dismiss button event listener IMMEDIATELY so it works during loading
+  // This must be done before the async rephrasing starts
+  const dismissBtn = tooltip.querySelector("#dismissBtn");
+  if (dismissBtn) {
+    dismissBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log("🚫 Dismiss button clicked - closing tooltip");
+      
+      // Log that user dismissed the suggestion (rephrasedText may be empty if still loading)
+      logInteraction({
+        usersOriginalContent: originalText,
+        rephraseSuggestion: rephrasedText || '', // May be empty if dismissed during loading
+        didUserAccept: 'no',
+        escalationType
+      });
+      
+      // Clean up position handlers and remove tooltip
+      if (tooltip && tooltip.parentNode) {
+        tooltip.remove();
+      }
+    }, { once: false }); // Allow multiple clicks in case first one doesn't work
+  } else {
+    console.error("❌ Dismiss button not found in tooltip!");
+  }
+
+  // Generate rephrased version (async - uses Gemini API only, no fallback)
   try {
     rephrasedText = await rephraseForDeEscalation(originalText);
   } catch (error) {
     console.error('❌ Error during rephrasing:', error);
-    // Fallback to pattern matching on error
-    rephrasedText = await rephraseForDeEscalation(originalText);
+    // No fallback - just set to null to show error message
+    rephrasedText = null;
   }
   
   // Update tooltip with the rephrased text
@@ -2090,9 +2182,10 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     if (suggestionContainer) {
       suggestionContainer.style.display = 'block';
     }
-    // FINAL cleanup for Hebrew - remove any English that might have slipped through
+    // DISABLED: Hebrew support - removed Hebrew cleanup
     let finalText = rephrasedText;
-    if (isHebrew || containsHebrew(rephrasedText)) {
+    // DISABLED: Hebrew cleanup code
+    if (false && (isHebrew || containsHebrew(rephrasedText))) {
       // Find first Hebrew character and remove everything before it
       const firstHebrewPos = finalText.search(/[\u0590-\u05FF]/);
       if (firstHebrewPos >= 0 && firstHebrewPos > 0) {
@@ -2124,13 +2217,10 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     }
   } else {
     // If rephrasing failed, show fallback
-    const errorMsg = isHebrew 
-      ? '"שגיאה ביצירת ניסוח מחדש. אנא נסה שוב."'
-      : '"Error generating rephrasing. Please try again."';
+    // DISABLED: Hebrew support - always use English error message
+    const errorMsg = '"Error generating rephrasing. Please try again."';
     if (suggestionText) {
-      if (isHebrew) {
-        suggestionText.classList.add('rtl-text');
-      }
+      // DISABLED: No RTL class needed
       suggestionText.textContent = errorMsg;
     }
     if (rephraseBtn) {
@@ -2141,32 +2231,14 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     }
   }
 
-  // Add event listeners for buttons - ensure they're always accessible
+  // Add event listener for rephrase button (dismiss button already handled above)
   // Use tooltip.querySelector instead of document.getElementById to ensure we get the button from THIS tooltip
-  const dismissBtn = tooltip.querySelector("#dismissBtn");
   const rephraseBtnElement = tooltip.querySelector("#rephraseBtn");
   
-  if (!dismissBtn || !rephraseBtnElement) {
-    console.error("❌ Buttons not found in tooltip!");
+  if (!rephraseBtnElement) {
+    console.error("❌ Rephrase button not found in tooltip!");
     return;
   }
-  
-  // Use addEventListener for better compatibility and event handling
-  dismissBtn.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    // Log that user dismissed the suggestion
-    logInteraction({
-      usersOriginalContent: originalText,
-      rephraseSuggestion: rephrasedText,
-      didUserAccept: 'no',
-      escalationType
-    });
-    
-    if (tooltip && tooltip.parentNode) {
-      tooltip.remove();
-    }
-  }, { once: true });
 
   rephraseBtnElement.onclick = () => {
     console.log("🔄 Rephrasing text...");

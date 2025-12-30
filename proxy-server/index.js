@@ -96,7 +96,7 @@ app.get('/debug/config', (req, res) => {
 // Main proxy endpoint (rate limiter removed - AI services have their own rate limits)
 app.post('/api/rephrase', validateRequest, async (req, res) => {
   try {
-    const { text, model, temperature, max_tokens, top_p } = req.body;
+    const { text, context, model, temperature, max_tokens, top_p } = req.body;
     
     // Prepare prompt
     const prompt = process.env.ECPM_PROMPT || req.body.prompt;
@@ -104,7 +104,25 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
       return res.status(400).json({ error: 'Prompt is required' });
     }
     
-    const fullPrompt = prompt.replace(/\{TEXT\}/g, text);
+    // Format context for the prompt
+    let contextText = 'No context provided';
+    if (context && context.originalPostContent && context.originalPostContent !== 'new') {
+      contextText = `Original Post/Comment: "${context.originalPostContent.substring(0, 500)}"`;
+      if (context.originalPostWriter && context.originalPostWriter !== 'new') {
+        contextText += `\nAuthor: ${context.originalPostWriter}`;
+      }
+      if (context.isReply) {
+        contextText += `\nContext Type: Reply to the above post/comment`;
+      } else {
+        contextText += `\nContext Type: Original post (not a reply)`;
+      }
+    } else {
+      contextText = 'No context provided - this appears to be an original post (not a reply)';
+    }
+    
+    // Replace placeholders in prompt
+    let fullPrompt = prompt.replace(/\{TEXT\}/g, text);
+    fullPrompt = fullPrompt.replace(/\{CONTEXT\}/g, contextText);
     
     let responseText = '';
     
