@@ -39,10 +39,8 @@ De-Escalator ("we," "our," or "the extension") is committed to protecting your p
 
 ## Permissions Used
 
-- **activeTab**: To access text fields on the current tab for analysis.
-- **scripting**: To inject the detection and rephrasing functionality.
-- **storage**: To save your preferences (e.g., whether to enable API, API configuration).
-- **host_permissions** (`<all_urls>`): To work across different social media platforms where you may compose messages.
+- **storage**: To save your preferences (e.g., whether to enable API, API configuration) and user demographics.
+- **host_permissions** (`<all_urls>`): To work across different social media platforms where you may compose messages. Content scripts are automatically injected on all pages to detect and analyze text as you type.
 
 ## Your Rights
 
