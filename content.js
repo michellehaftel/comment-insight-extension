@@ -956,36 +956,82 @@ async function rephraseViaAPI(text, context = null) {
       top_p: requestBody.top_p
     });
     
-    // Call proxy server with retry logic for rate limits
+    // Call proxy server with retry logic for rate limits AND transient 500 errors
     let response;
     let lastError = null;
-    const maxRetries = 2;
-    const baseDelay = 2000; // 2 seconds
+    const maxRetries = 3; // Increased to 3 retries for better reliability
+    const baseDelay = 1500; // 1.5 seconds base delay
     
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       if (attempt > 0) {
-        // Wait before retry (exponential backoff)
-        const delay = baseDelay * Math.pow(2, attempt - 1);
-        console.log(`⏳ Rate limited. Waiting ${delay/1000}s before retry ${attempt}/${maxRetries}...`);
+        // Wait before retry (exponential backoff with jitter)
+        const exponentialDelay = baseDelay * Math.pow(2, attempt - 1);
+        // Add random jitter (0-500ms) to avoid thundering herd
+        const jitter = Math.random() * 500;
+        const delay = exponentialDelay + jitter;
+        console.log(`⏳ Retrying after error. Waiting ${(delay/1000).toFixed(2)}s before retry ${attempt}/${maxRetries}...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
       
-      response = await fetch(`${PROXY_SERVER_URL}/api/rephrase`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      });
-      
-      // If successful or not a rate limit error, break out of retry loop
-      if (response.ok || response.status !== 429) {
-        break;
+      try {
+        response = await fetch(`${PROXY_SERVER_URL}/api/rephrase`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(requestBody)
+        });
+        
+        // If successful, break out of retry loop
+        if (response.ok) {
+          console.log(`✅ Request succeeded on attempt ${attempt + 1}`);
+          break;
+        }
+        
+        // Check if we should retry based on status code
+        const status = response.status;
+        const isRetryableError = status === 429 || (status >= 500 && status < 600);
+        
+        // Get error details for logging
+        try {
+          lastError = await response.json();
+        } catch (e) {
+          lastError = { error: `HTTP ${status}`, details: response.statusText };
+        }
+        
+        // If not a retryable error (like 400, 401, etc.), don't retry
+        if (!isRetryableError) {
+          console.error(`❌ Non-retryable error (${status}), stopping retries`);
+          break;
+        }
+        
+        // Log retry reason
+        if (status === 429) {
+          console.warn(`⚠️ Rate limit hit (attempt ${attempt + 1}/${maxRetries + 1})`);
+        } else if (status >= 500) {
+          console.warn(`⚠️ Server error ${status} (transient, attempt ${attempt + 1}/${maxRetries + 1})`);
+          console.warn(`   This is often a temporary issue with Gemini's servers. Retrying...`);
+        }
+        
+        // If this was the last attempt, don't break - let error handling below take over
+        if (attempt === maxRetries) {
+          console.error(`❌ All ${maxRetries + 1} attempts failed`);
+        }
+      } catch (networkError) {
+        // Network error (connection failed, timeout, etc.) - also retry
+        console.warn(`⚠️ Network error on attempt ${attempt + 1}/${maxRetries + 1}:`, networkError.message);
+        lastError = { error: 'Network error', details: networkError.message };
+        
+        // Only retry network errors if we have attempts left
+        if (attempt === maxRetries) {
+          throw networkError;
+        }
       }
-      
-      // Rate limited - will retry if attempts remain
-      lastError = await response.json().catch(() => ({ error: 'Rate limit exceeded' }));
-      console.warn(`⚠️ Rate limit hit (attempt ${attempt + 1}/${maxRetries + 1})`);
+    }
+    
+    // Handle case where all retries failed with network errors (response might be undefined)
+    if (!response) {
+      throw new Error('All retry attempts failed. Network error or server unavailable.');
     }
     
     if (!response.ok) {
@@ -1018,6 +1064,14 @@ async function rephraseViaAPI(text, context = null) {
         console.error('💡 Please wait 30-60 seconds and try again. This is a limitation of the Gemini API.');
       } else if (response.status === 504) {
         console.error('⚠️ Request timeout. The proxy server did not respond in time.');
+      } else if (response.status >= 500 && response.status < 600) {
+        console.error(`❌ Server error ${response.status} after ${maxRetries + 1} retry attempts`);
+        console.error('📝 This is likely a temporary issue with Gemini\'s servers');
+        console.error('📝 Error details:', errorData.details || errorData.error || errorData.message || JSON.stringify(errorData));
+        if (errorData.debug) {
+          console.error('🔍 Debug info:', errorData.debug);
+        }
+        console.error('💡 Tip: Wait a few seconds and try again. Server errors are usually transient.');
       } else {
         console.error('❌ Proxy server error:', response.status);
         console.error('📝 Error details:', errorData.details || errorData.error || errorData.message || JSON.stringify(errorData));

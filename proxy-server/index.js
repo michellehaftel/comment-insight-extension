@@ -107,7 +107,7 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
     // Format context for the prompt
     let contextText = 'No context provided';
     if (context && context.originalPostContent && context.originalPostContent !== 'new') {
-      contextText = `Original Post/Comment: "${context.originalPostContent.substring(0, 500)}"`;
+      contextText = `Original Post/Comment: "${context.originalPostContent.substring(0, 300)}"`;  // Reduced from 500 to 300 to reduce prompt length
       if (context.originalPostWriter && context.originalPostWriter !== 'new') {
         contextText += `\nAuthor: ${context.originalPostWriter}`;
       }
@@ -161,26 +161,59 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
       console.log(`📝 Forwarding request to Gemini (text length: ${text.length}, model: ${geminiModel})`);
       console.log(`📝 Prompt length: ${fullPrompt.length}`);
       
-      // Make the actual request
+      // Make the actual request with retry logic for transient errors
       let geminiResponse;
-      try {
-        geminiResponse = await axios.post(
-          geminiUrl,
-          geminiRequest,
-          {
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            timeout: 30000
-          }
-        );
-      } catch (axiosError) {
-        console.error('❌ Axios error calling Gemini:', axiosError.message);
-        if (axiosError.response) {
-          console.error('📄 Gemini API response status:', axiosError.response.status);
-          console.error('📄 Gemini API response data:', JSON.stringify(axiosError.response.data, null, 2));
+      const maxGeminiRetries = 2; // Retry up to 2 times (3 total attempts)
+      const baseRetryDelay = 1000; // 1 second base delay
+      
+      for (let retryAttempt = 0; retryAttempt <= maxGeminiRetries; retryAttempt++) {
+        if (retryAttempt > 0) {
+          const delay = baseRetryDelay * Math.pow(2, retryAttempt - 1) + Math.random() * 500; // Exponential backoff with jitter
+          console.log(`⏳ Retrying Gemini API call (attempt ${retryAttempt + 1}/${maxGeminiRetries + 1}) after ${(delay/1000).toFixed(2)}s...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
-        throw axiosError;
+        
+        try {
+          geminiResponse = await axios.post(
+            geminiUrl,
+            geminiRequest,
+            {
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              timeout: 45000  // 45 seconds - increased to handle longer prompts
+            }
+          );
+          
+          // Success - break out of retry loop
+          if (retryAttempt > 0) {
+            console.log(`✅ Gemini API call succeeded on retry attempt ${retryAttempt + 1}`);
+          }
+          break;
+        } catch (axiosError) {
+          // Check if this is a retryable error
+          const isRetryable = 
+            !axiosError.response || // Network error (timeout, connection refused, etc.)
+            (axiosError.response.status >= 500 && axiosError.response.status < 600) || // Server errors
+            axiosError.response.status === 429; // Rate limit (though we handle this separately)
+          
+          if (!isRetryable || retryAttempt === maxGeminiRetries) {
+            // Not retryable or last attempt - throw the error
+            console.error('❌ Axios error calling Gemini:', axiosError.message);
+            if (axiosError.response) {
+              console.error('📄 Gemini API response status:', axiosError.response.status);
+              console.error('📄 Gemini API response data:', JSON.stringify(axiosError.response.data, null, 2));
+            }
+            throw axiosError;
+          }
+          
+          // Log retryable error and continue to retry
+          if (axiosError.response) {
+            console.warn(`⚠️ Gemini API returned ${axiosError.response.status} (retryable), will retry...`);
+          } else {
+            console.warn(`⚠️ Network error calling Gemini (${axiosError.message}), will retry...`);
+          }
+        }
       }
       
       console.log(`📄 Full Gemini response structure:`, JSON.stringify(geminiResponse.data, null, 2));
@@ -297,7 +330,7 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiKey}`
           },
-          timeout: 30000
+          timeout: 45000  // 45 seconds - increased to handle longer prompts
         }
       );
       
