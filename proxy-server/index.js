@@ -142,6 +142,8 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
       // Use v1beta - this is the correct API version for current models
       const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
       
+      // Build request - use responseMimeType to request JSON format
+      // Note: responseSchema might not be supported by all models, so we rely on prompt instructions + responseMimeType
       const geminiRequest = {
         contents: [{
           parts: [{
@@ -157,21 +159,109 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
       };
       
       console.log(`📝 Forwarding request to Gemini (text length: ${text.length}, model: ${geminiModel})`);
+      console.log(`📝 Prompt length: ${fullPrompt.length}`);
       
       // Make the actual request
-      const geminiResponse = await axios.post(
-        geminiUrl,
-        geminiRequest,
-        {
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          timeout: 30000
+      let geminiResponse;
+      try {
+        geminiResponse = await axios.post(
+          geminiUrl,
+          geminiRequest,
+          {
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            timeout: 30000
+          }
+        );
+      } catch (axiosError) {
+        console.error('❌ Axios error calling Gemini:', axiosError.message);
+        if (axiosError.response) {
+          console.error('📄 Gemini API response status:', axiosError.response.status);
+          console.error('📄 Gemini API response data:', JSON.stringify(axiosError.response.data, null, 2));
         }
-      );
+        throw axiosError;
+      }
       
-      responseText = geminiResponse.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      console.log(`📄 Full Gemini response structure:`, JSON.stringify(geminiResponse.data, null, 2));
+      
+      // Check if we have candidates
+      if (!geminiResponse.data.candidates || geminiResponse.data.candidates.length === 0) {
+        console.error('❌ Gemini returned no candidates');
+        console.error('📄 Full response:', JSON.stringify(geminiResponse.data, null, 2));
+        return res.status(500).json({
+          error: 'AI service returned no response',
+          details: 'Gemini API returned an empty candidates array'
+        });
+      }
+      
+      const candidate = geminiResponse.data.candidates[0];
+      
+      // Check finish reason
+      if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+        console.error(`⚠️ Gemini finish reason: ${candidate.finishReason}`);
+        if (candidate.finishReason === 'SAFETY') {
+          return res.status(500).json({
+            error: 'Content was blocked by safety filters',
+            details: 'The AI service blocked the response due to content safety policies.'
+          });
+        }
+        if (candidate.finishReason === 'MAX_TOKENS') {
+          console.warn('⚠️ Response truncated due to max tokens');
+        }
+      }
+      
+      responseText = candidate.content?.parts?.[0]?.text || '';
       console.log(`✅ Gemini response received (length: ${responseText.length})`);
+      
+      // ===== DETAILED LOGGING FOR MANUAL VALIDATION =====
+      console.log('\n' + '='.repeat(80));
+      console.log('🔍 RAW GEMINI RESPONSE FOR MANUAL VALIDATION');
+      console.log('='.repeat(80));
+      console.log('📄 Response Length:', responseText.length);
+      console.log('📄 Response Type:', typeof responseText);
+      console.log('📄 Starts with {?', responseText.trim().startsWith('{'));
+      console.log('📄 Ends with }?', responseText.trim().endsWith('}'));
+      console.log('📄 Contains markdown code blocks?', responseText.includes('```'));
+      console.log('\n📄 FIRST 500 CHARACTERS:');
+      console.log('-'.repeat(80));
+      console.log(responseText.substring(0, 500));
+      console.log('-'.repeat(80));
+      console.log('\n📄 LAST 500 CHARACTERS:');
+      console.log('-'.repeat(80));
+      console.log(responseText.substring(Math.max(0, responseText.length - 500)));
+      console.log('-'.repeat(80));
+      console.log('\n📄 FULL RESPONSE (COMPLETE):');
+      console.log('='.repeat(80));
+      console.log(responseText);
+      console.log('='.repeat(80));
+      console.log('\n📄 FULL GEMINI RESPONSE STRUCTURE (raw API response):');
+      console.log(JSON.stringify(geminiResponse.data, null, 2));
+      console.log('='.repeat(80) + '\n');
+      // ===== END DETAILED LOGGING =====
+      
+      // Log response structure for debugging
+      if (!responseText || responseText.trim().length === 0) {
+        console.error('❌ Gemini returned empty response');
+        console.error('Full Gemini response structure:', JSON.stringify(geminiResponse.data, null, 2));
+        
+        // Check for finish reasons that indicate errors
+        const finishReason = geminiResponse.data.candidates?.[0]?.finishReason;
+        if (finishReason && finishReason !== 'STOP') {
+          console.error(`⚠️ Gemini finish reason: ${finishReason}`);
+          if (finishReason === 'SAFETY') {
+            return res.status(500).json({
+              error: 'Content was blocked by safety filters',
+              details: 'The AI service blocked the response due to content safety policies.'
+            });
+          }
+        }
+        
+        return res.status(500).json({
+          error: 'AI service returned empty response',
+          details: 'The AI service did not generate any text in the response.'
+        });
+      }
       
     } else {
       // Use OpenAI API
@@ -215,16 +305,165 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
       console.log(`✅ OpenAI response received (length: ${responseText.length})`);
     }
     
-    // Parse JSON response
+    // Parse JSON response - ULTRA-ROBUST parsing with multiple fallback strategies
+    // Gemini might return JSON wrapped in markdown, with extra text, malformed, etc.
     let parsed;
+    let parseAttempts = [];
+    
     try {
-      parsed = typeof responseText === 'string' ? JSON.parse(responseText) : responseText;
+      // Strategy 1: Direct parse (if response is pure JSON)
+      try {
+        parsed = JSON.parse(responseText.trim());
+        console.log('✅ Strategy 1 succeeded: Direct JSON parse');
+      } catch (e1) {
+        parseAttempts.push('Direct parse failed: ' + e1.message);
+        
+        // Strategy 2: Extract from markdown code blocks (```json ... ```)
+      try {
+        const jsonMatch = responseText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/s);
+        if (jsonMatch && jsonMatch[1]) {
+          parsed = JSON.parse(jsonMatch[1].trim());
+          console.log('✅ Strategy 2 succeeded: Extracted from markdown code block');
+        } else {
+          throw new Error('No code block match found');
+        }
+      } catch (e2) {
+        parseAttempts.push('Code block extraction failed: ' + e2.message);
+        
+        // Strategy 3: Find first complete JSON object in text (most common case)
+        try {
+          const firstBrace = responseText.indexOf('{');
+          if (firstBrace !== -1) {
+            // Start from first brace and find matching closing brace
+            let braceCount = 0;
+            let lastBrace = -1;
+            for (let i = firstBrace; i < responseText.length; i++) {
+              if (responseText[i] === '{') braceCount++;
+              if (responseText[i] === '}') {
+                braceCount--;
+                if (braceCount === 0) {
+                  lastBrace = i;
+                  break;
+                }
+              }
+            }
+            
+            if (lastBrace !== -1) {
+              const jsonCandidate = responseText.substring(firstBrace, lastBrace + 1);
+              parsed = JSON.parse(jsonCandidate);
+              console.log('✅ Strategy 3 succeeded: Extracted JSON object from text');
+            } else {
+              throw new Error('Could not find matching closing brace');
+            }
+          } else {
+            throw new Error('No opening brace found');
+          }
+        } catch (e3) {
+          parseAttempts.push('Object extraction failed: ' + e3.message);
+          
+          // Strategy 4: Try to fix common JSON issues (trailing commas, etc.)
+          try {
+            let cleaned = responseText.trim();
+            // Remove markdown code block markers
+            cleaned = cleaned.replace(/```(?:json)?/g, '').replace(/```/g, '').trim();
+            // Find JSON object
+            const objMatch = cleaned.match(/\{[\s\S]*\}/);
+            if (objMatch) {
+              let jsonStr = objMatch[0];
+              // Fix trailing commas before } or ]
+              jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1');
+              // Fix trailing commas in arrays
+              jsonStr = jsonStr.replace(/,(\s*])/g, ']');
+              parsed = JSON.parse(jsonStr);
+              console.log('✅ Strategy 4 succeeded: Fixed common JSON issues');
+            } else {
+              throw new Error('No JSON object found after cleaning');
+            }
+          } catch (e4) {
+            parseAttempts.push('JSON fixing failed: ' + e4.message);
+            
+            // Strategy 5: Try to extract JSON from text that might have explanation
+            try {
+              // Look for common JSON start patterns
+              const patterns = [
+                /\{[\s\S]{20,10000}\}/,  // General JSON object (20-10000 chars)
+                /\{"rephrasedText"[\s\S]*\}/,  // JSON starting with our expected field
+                /\{"riskLevel"[\s\S]*\}/,  // JSON starting with riskLevel
+              ];
+              
+              for (const pattern of patterns) {
+                const match = responseText.match(pattern);
+                if (match) {
+                  try {
+                    parsed = JSON.parse(match[0]);
+                    console.log('✅ Strategy 5 succeeded: Pattern-based extraction');
+                    break;
+                  } catch (parseErr) {
+                    continue;
+                  }
+                }
+              }
+              
+              if (!parsed) {
+                throw new Error('All pattern extractions failed');
+              }
+            } catch (e5) {
+              parseAttempts.push('Pattern extraction failed: ' + e5.message);
+              throw new Error('All JSON parsing strategies failed');
+            }
+          }
+        }
+      }
+    }
+    
+    // If we still don't have parsed JSON, throw error with all attempts logged
+    if (!parsed) {
+      const parseError = new Error('Failed to parse JSON after all strategies');
+      parseError.attempts = parseAttempts;
+      throw parseError;
+    }
+    
+    console.log('✅ Successfully parsed JSON response');
     } catch (parseError) {
-      console.error('❌ Failed to parse AI response as JSON:', parseError);
-      console.error('Raw response:', responseText);
-      return res.status(500).json({ 
-        error: 'Invalid response from AI service' 
-      });
+      // Handle JSON parsing errors specifically
+      console.error('❌ FAILED TO PARSE JSON AFTER ALL STRATEGIES');
+      console.error('Parse error:', parseError.message);
+      if (parseError.attempts) {
+        console.error('All parse attempts:', parseError.attempts);
+      }
+      console.error('Raw response (first 2000 chars):', responseText.substring(0, 2000));
+      console.error('Raw response length:', responseText.length);
+      console.error('Response type:', typeof responseText);
+      console.error('Response starts with:', responseText.substring(0, 100));
+      console.error('Response ends with:', responseText.substring(Math.max(0, responseText.length - 100)));
+      console.error('FULL RESPONSE FOR DEBUGGING:', responseText);
+      
+      // Check if response is empty
+      if (!responseText || responseText.trim().length === 0) {
+        return res.status(500).json({ 
+          error: 'Invalid response from AI service',
+          details: 'AI service returned an empty response'
+        });
+      }
+      
+      // Return detailed error with full response for debugging
+      const errorResponse = {
+        error: 'Invalid response from AI service',
+        details: 'AI service response is not valid JSON. All parsing strategies failed.',
+        debug: { 
+          responsePreview: responseText.substring(0, 1000),
+          responseLength: responseText.length,
+          parseError: parseError.message,
+          parseAttempts: parseError.attempts || parseAttempts,
+          responseStart: responseText.substring(0, 100),
+          responseEnd: responseText.substring(Math.max(0, responseText.length - 100)),
+          hasCodeBlocks: responseText.includes('```'),
+          hasJsonStart: responseText.trim().startsWith('{'),
+          hasJsonEnd: responseText.trim().endsWith('}')
+        }
+      };
+      
+      return res.status(500).json(errorResponse);
     }
     
     // Extract rephrasedText from the response

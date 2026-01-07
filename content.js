@@ -420,8 +420,8 @@ function isEscalating(text) {
 
   // 3. Categorical/absolute language
   const categoricalWords = [
-    /\b(always|never|everyone|nobody|nothing|everything)\b/i,
-    /\b(only|solely|exclusively|completely|totally|absolutely|definitely|certainly)\b/i
+    /\b(always|never|everyone|nobody|nothing|everything|neither|either)\b/i,
+    /\b(only|solely|exclusively|completely|totally|absolutely|definitely|certainly|just|actually)\b/i
   ];
   
   // Catch "once X, always X" pattern (categorical absolutism)
@@ -504,6 +504,23 @@ function isEscalating(text) {
     }
   });
 
+  // 3.5. Dismissive/categorical statements about relationships or third parties
+  // These catch dismissive language about political relationships, partnerships, etc.
+  const dismissiveRelationshipPatterns = [
+    /\bis just (?:a|an) (?:political theater|show|act|game|joke|charade)\b/i, // "is just political theater"
+    /\bis (?:nothing but|only|merely|simply) (?:a|an) (?:political theater|show|act|game|joke|charade)\b/i,
+    /\b(?:neither|either) (?:actually|really|truly|genuinely) (?:care|cares|care about|matter|matters)\b/i, // "Neither actually care"
+    /\b(?:they|he|she) (?:don't|doesn't) (?:actually|really|truly|genuinely) (?:care|matter|mean it)\b/i,
+    /\b(?:their|his|her) (?:relationship|friendship|alliance) is (?:just|only|merely|simply|nothing but)\b/i // "their relationship is just..."
+  ];
+  
+  dismissiveRelationshipPatterns.forEach(pattern => {
+    if (pattern.test(trimmedText)) {
+      escalationScore += 2;
+      reasons.push("Dismissive/categorical statement about relationships or third parties");
+    }
+  });
+
   // 4. Judging/condemning language
   const judgingPatterns = [
     // Basic "you are/you're [negative adjective]"
@@ -513,6 +530,12 @@ function isEscalating(text) {
     
     // "You are [article] [adjective] [noun]" patterns (e.g., "you are a disgusting creature", "you are the worst mistake")
     /\b(you are (?:a|an|the) (?:disgusting|terrible|awful|horrible|pathetic|ridiculous|stupid|dumb|worst|bad|worst|vile|repulsive|despicable|contemptible) (?:creature|mistake|person|human|thing|being|scum|filth|waste|joke|disgrace|shame|failure|monster|beast|animal))\b/i,
+    
+    // Third-person statements about specific people: "[Name] is a [adjective] [noun]" (e.g., "Bibi is a disgusting creature", "Trump is a terrible person")
+    /\b\w+ (?:is|are|was|were) (?:a|an|the) (?:disgusting|terrible|awful|horrible|pathetic|ridiculous|stupid|dumb|worst|bad|vile|repulsive|despicable|contemptible) (?:creature|mistake|person|human|thing|being|scum|filth|waste|joke|disgrace|shame|failure|monster|beast|animal)\b/i,
+    
+    // Third-person "[Name] is such a [negative noun]" patterns
+    /\b\w+ (?:is|are|was|were) such a (?:mistake|failure|disgrace|shame|joke|monster|beast|animal|creature|scum|filth|waste|disaster|tragedy|nightmare|curse|plague|burden|problem|issue|threat|danger|liability)\b/i,
     
     // "You are such a [negative noun]" patterns (e.g., "you are such a mistake", "you are such a failure")
     /\b(you are such a (?:mistake|failure|disgrace|shame|joke|monster|beast|animal|creature|scum|filth|waste|disaster|tragedy|nightmare|curse|plague|burden|problem|issue|threat|danger|liability))\b/i,
@@ -919,7 +942,14 @@ async function rephraseViaAPI(text, context = null) {
     console.log('🤖 Calling proxy server for rephrasing...');
     console.log('📡 Proxy URL:', PROXY_SERVER_URL);
     console.log('📝 Model:', requestBody.model);
+    console.log('📝 Text to rephrase:', text.substring(0, 100) + (text.length > 100 ? '...' : ''));
     console.log('📝 Text length:', text.length);
+    console.log('📝 Context provided:', {
+      hasContext: !!context,
+      isReply: context?.isReply,
+      hasOriginalPost: !!(context?.originalPostContent && context.originalPostContent !== 'new'),
+      originalPostPreview: context?.originalPostContent?.substring(0, 50) || 'none'
+    });
     console.log('📝 Parameters:', {
       temperature: requestBody.temperature,
       max_tokens: requestBody.max_tokens,
@@ -959,7 +989,24 @@ async function rephraseViaAPI(text, context = null) {
     }
     
     if (!response.ok) {
-      const errorData = lastError || await response.json().catch(() => ({ error: 'Unknown error' }));
+      console.error('❌ API request failed with status:', response.status);
+      console.error('📝 Response status text:', response.statusText);
+      
+      let errorData;
+      try {
+        const errorText = await response.text();
+        console.error('📄 Raw error response:', errorText);
+        try {
+          errorData = JSON.parse(errorText);
+          console.error('📄 Parsed error response:', JSON.stringify(errorData, null, 2));
+        } catch (parseErr) {
+          console.error('⚠️ Error response is not JSON:', errorText);
+          errorData = { error: errorText, raw: true };
+        }
+      } catch (textErr) {
+        console.error('⚠️ Could not read error response:', textErr);
+        errorData = lastError || { error: 'Unknown error' };
+      }
       
       // Better error logging
       if (response.status === 401) {
@@ -979,13 +1026,18 @@ async function rephraseViaAPI(text, context = null) {
         }
       }
       
-      return null;
+      // Throw error instead of returning null - this distinguishes errors from "already de-escalatory"
+      throw new Error(`API request failed: ${response.status} - ${errorData.details || errorData.error || 'Unknown error'}`);
     }
     
-    const parsed = await response.json();
-    
-    console.log('📥 Proxy server response received');
-    console.log('📄 Response keys:', Object.keys(parsed || {}));
+      const parsed = await response.json();
+      
+      console.log('📥 Proxy server response received');
+      console.log('📄 Response keys:', Object.keys(parsed || {}));
+      console.log('📄 Full response:', JSON.stringify(parsed, null, 2));
+      console.log('📄 Response has rephrasedText field?', 'rephrasedText' in parsed);
+      console.log('📄 rephrasedText value:', parsed?.rephrasedText);
+      console.log('📄 rephrasedText type:', typeof parsed?.rephrasedText);
     
     // Log context understanding if available
     if (parsed.why?.contextUnderstanding) {
@@ -1003,6 +1055,15 @@ async function rephraseViaAPI(text, context = null) {
     if (parsed) {
       try {
         console.log('✅ Successfully received response from proxy:', parsed);
+        console.log('🔍 DEBUGGING - Response analysis:', {
+          hasRephrasedTextField: 'rephrasedText' in parsed,
+          rephrasedTextValue: parsed.rephrasedText,
+          rephrasedTextType: typeof parsed.rephrasedText,
+          isNull: parsed.rephrasedText === null,
+          isUndefined: parsed.rephrasedText === undefined,
+          isEmptyString: parsed.rephrasedText === '',
+          allKeys: Object.keys(parsed)
+        });
         
         // Extract rephrased text
         // Check if the field exists (even if null) - null means text is already de-escalatory
@@ -1010,10 +1071,21 @@ async function rephraseViaAPI(text, context = null) {
           // If rephrasedText is null, the text is already de-escalatory
           if (parsed.rephrasedText === null) {
             console.log('ℹ️ Text is already de-escalatory, no rephrasing needed');
+            console.log('⚠️ WARNING: API returned null for clearly escalatory text. This might indicate:');
+            console.log('   1. The AI incorrectly classified it as de-escalatory');
+            console.log('   2. The prompt needs adjustment');
+            console.log('   3. The API response parsing is incorrect');
+            return null;
+          }
+          
+          // Check if it's an empty string or whitespace
+          if (typeof parsed.rephrasedText === 'string' && parsed.rephrasedText.trim().length === 0) {
+            console.error('❌ ERROR: rephrasedText is an empty string!');
             return null;
           }
           
           let rephrased = parsed.rephrasedText.trim();
+          console.log('✅ Rephrased text extracted successfully, length:', rephrased.length);
           
           // DISABLED: Hebrew support is currently deactivated
           // If original text was Hebrew, ensure rephrased text is entirely in Hebrew
@@ -1160,7 +1232,7 @@ async function rephraseViaAPI(text, context = null) {
     return null;
   } catch (error) {
     console.error('❌ Error calling proxy server:', error);
-    return null;
+    throw error;  // Re-throw instead of returning null - this distinguishes errors from legitimate null responses
   }
 }
 
@@ -2136,7 +2208,9 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   };
 
   // Declare rephrasedText early so it's accessible in the dismiss button handler
-  let rephrasedText = '';
+  // Use undefined to distinguish between: null (already de-escalatory) vs undefined (error)
+  let rephrasedText = undefined;
+  let rephrasingError = false;
 
   // IMPORTANT: Attach dismiss button event listener IMMEDIATELY so it works during loading
   // This must be done before the async rephrasing starts
@@ -2150,7 +2224,7 @@ async function createEscalationTooltip(originalText, element, escalationType = '
       // Log that user dismissed the suggestion (rephrasedText may be empty if still loading)
       logInteraction({
         usersOriginalContent: originalText,
-        rephraseSuggestion: rephrasedText || '', // May be empty if dismissed during loading
+        rephraseSuggestion: (rephrasedText && typeof rephrasedText === 'string') ? rephrasedText : '', // May be empty if dismissed during loading or error
         didUserAccept: 'no',
         escalationType
       });
@@ -2167,17 +2241,21 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   // Generate rephrased version (async - uses Gemini API only, no fallback)
   try {
     rephrasedText = await rephraseForDeEscalation(originalText);
+    // rephrasedText can be null (already de-escalatory) or a string (rephrased text)
+    // undefined means an error occurred
   } catch (error) {
     console.error('❌ Error during rephrasing:', error);
-    // No fallback - just set to null to show error message
-    rephrasedText = null;
+    rephrasingError = true;
+    rephrasedText = undefined; // Keep as undefined to distinguish from null (already de-escalatory)
   }
   
   // Update tooltip with the rephrased text
   const suggestionContainer = tooltip.querySelector('.tooltip-suggestion');
   const suggestionText = tooltip.querySelector('.tooltip-suggestion-text');
   const rephraseBtn = tooltip.querySelector('#rephraseBtn') || document.getElementById('rephraseBtn');
-  if (suggestionText && rephrasedText) {
+  
+  // Check if we have a valid rephrased text (string)
+  if (suggestionText && rephrasedText && typeof rephrasedText === 'string' && rephrasedText.trim().length > 0) {
     // Show the suggestion container now that we have the rephrased text
     if (suggestionContainer) {
       suggestionContainer.style.display = 'block';
@@ -2216,20 +2294,60 @@ async function createEscalationTooltip(originalText, element, escalationType = '
       if (spinner) spinner.remove();
     }
   } else {
-    // If rephrasing failed, show fallback
+    // If rephrasing failed or returned null, show appropriate message
     // DISABLED: Hebrew support - always use English error message
-    const errorMsg = '"Error generating rephrasing. Please try again."';
+    let errorMsg;
+    let buttonText = "Rephrase";
+    let allowManualRephrase = false;
+    
+    if (rephrasingError || rephrasedText === undefined) {
+      // Error occurred during API call - escalation WAS detected but API failed
+      errorMsg = '"Due to a problem, we couldn\'t offer a rephrase. Please try rephrasing on your own."';
+      buttonText = "Rephrase on my own";
+      allowManualRephrase = true; // Allow user to dismiss and edit manually
+      console.log("❌ Rephrasing failed due to error - escalation was detected but API call failed");
+    } else if (rephrasedText === null) {
+      // API explicitly returned null (text is already de-escalatory)
+      // NOTE: If escalation was detected but API returns null, this is contradictory
+      // But we trust the API's judgment that it's already de-escalatory
+      errorMsg = '"This text is already de-escalatory and does not need rephrasing."';
+      buttonText = "Dismiss";
+      allowManualRephrase = false;
+      console.log("ℹ️ API returned null - text is already de-escalatory (even though escalation was detected)");
+    } else {
+      // Empty string or other unexpected value - treat as error
+      errorMsg = '"Due to a problem, we couldn\'t offer a rephrase. Please try rephrasing on your own."';
+      buttonText = "Rephrase on my own";
+      allowManualRephrase = true;
+      console.log("❌ Unexpected rephrasedText value:", rephrasedText);
+    }
+    
     if (suggestionText) {
       // DISABLED: No RTL class needed
       suggestionText.textContent = errorMsg;
+      // Show the suggestion container even for errors so user knows what happened
+      if (suggestionContainer) {
+        suggestionContainer.style.display = 'block';
+      }
     }
     if (rephraseBtn) {
-      rephraseBtn.disabled = true;
+      rephraseBtn.disabled = false; // Enable button for "Rephrase on my own"
+      rephraseBtn.textContent = buttonText;
       rephraseBtn.classList.remove('loading');
       const spinner = rephraseBtn.querySelector('.spinner');
       if (spinner) spinner.remove();
+      
+      console.log("📊 Button updated:", { text: buttonText, enabled: !rephraseBtn.disabled, allowManualRephrase });
     }
   }
+  
+  // Log final state
+  console.log("📊 Tooltip update complete:", {
+    hasRephrasedText: !!rephrasedText && rephrasedText.trim().length > 0,
+    rephrasedTextLength: rephrasedText ? rephrasedText.length : 0,
+    buttonDisabled: rephraseBtn ? rephraseBtn.disabled : 'button not found',
+    buttonInDOM: rephraseBtn ? rephraseBtn.isConnected : false
+  });
 
   // Add event listener for rephrase button (dismiss button already handled above)
   // Use tooltip.querySelector instead of document.getElementById to ensure we get the button from THIS tooltip
@@ -2240,10 +2358,44 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     return;
   }
 
+  // Determine if this is "Rephrase on my own" case (error occurred)
+  const isManualRephraseCase = (rephrasingError || rephrasedText === undefined || 
+                                 (rephrasedText !== null && typeof rephrasedText === 'string' && rephrasedText.trim().length === 0));
+
   rephraseBtnElement.onclick = () => {
-    console.log("🔄 Rephrasing text...");
+    console.log("🔄 Rephrase button clicked");
     console.log("Original:", originalText);
     console.log("Rephrased:", rephrasedText);
+    console.log("Is manual rephrase case:", isManualRephraseCase);
+    
+    // If this is "Rephrase on my own" case (error occurred), just dismiss and let user edit
+    if (isManualRephraseCase) {
+      console.log("🔄 User will rephrase on their own - dismissing tooltip");
+      tooltip.remove();
+      // Focus the input so user can edit
+      const elementToFocus = targetElement || currentElementBeingChecked;
+      if (elementToFocus && elementToFocus.isConnected) {
+        elementToFocus.focus();
+        // Place cursor at end
+        const selection = window.getSelection();
+        if (selection && elementToFocus.contentEditable === 'true') {
+          const range = document.createRange();
+          range.selectNodeContents(elementToFocus);
+          range.collapse(false);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+      }
+      return;
+    }
+    
+    // Safety check: ensure we have rephrased text for normal rephrase case
+    if (!rephrasedText || typeof rephrasedText !== 'string' || rephrasedText.trim().length === 0) {
+      console.error("❌ Cannot rephrase: rephrasedText is empty or null");
+      alert("Rephrasing suggestion is not available. Please try again.");
+      tooltip.remove();
+      return;
+    }
     
     // Store element reference and editability state BEFORE any changes
     // Try multiple sources to find the element (important for replies where element might change)
