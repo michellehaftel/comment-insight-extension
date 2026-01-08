@@ -1098,15 +1098,19 @@ async function rephraseViaAPI(text, context = null) {
         const responseClone = response.clone();
         
         // Get error details for logging (from clone, so we can read original later)
+        // Read as text first, then try to parse as JSON (stream can only be read once)
         try {
-          lastError = await responseClone.json();
-        } catch (e) {
+          const errorText = await responseClone.text();
           try {
-            const errorText = await responseClone.text();
+            // Try to parse as JSON
+            lastError = JSON.parse(errorText);
+          } catch (jsonErr) {
+            // Not valid JSON, use as plain text
             lastError = { error: `HTTP ${status}`, details: errorText || response.statusText };
-          } catch (textErr) {
-            lastError = { error: `HTTP ${status}`, details: response.statusText };
           }
+        } catch (textErr) {
+          // Failed to read response body at all
+          lastError = { error: `HTTP ${status}`, details: response.statusText };
         }
         
         // If not a retryable error (like 400, 401, etc.), don't retry
@@ -2285,57 +2289,129 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     </div>
   `;
   document.body.appendChild(tooltip);
+  console.log("✅ Tooltip created and appended to DOM:", {
+    tooltipInDOM: tooltip.parentNode === document.body,
+    tooltipElement: tooltip,
+    tooltipHTML: tooltip.innerHTML.substring(0, 200)
+  });
   
   // Function to update tooltip position based on target element
   const updateTooltipPosition = () => {
     // #region agent log
     fetch('http://127.0.0.1:7242/ingest/129f1d44-820f-4581-af24-9711702125a2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'content.js:1847',message:'updateTooltipPosition called',data:{hasTargetElement:!!targetElement,hasTooltip:!!tooltip,tooltipInDOM:tooltip?.parentNode?true:false},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
     // #endregion
-    if (!targetElement || !tooltip.parentNode) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/129f1d44-820f-4581-af24-9711702125a2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'content.js:1850',message:'Early return in updateTooltipPosition',data:{hasTargetElement:!!targetElement,hasTooltip:!!tooltip,tooltipInDOM:tooltip?.parentNode?true:false},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
+    
+    // Check if tooltip is still in DOM
+    if (!tooltip.parentNode) {
+      console.warn("⚠️ Tooltip not in DOM, cannot position");
       return;
     }
     
-    const rect = targetElement.getBoundingClientRect();
-    const tooltipRect = tooltip.getBoundingClientRect();
-    
-    // Position below the element with some spacing (using viewport coordinates for fixed positioning)
-    let top = rect.bottom + 10;
-    let left = rect.left;
-    
-    // Ensure tooltip doesn't go off-screen
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
+    let tooltipRect = tooltip.getBoundingClientRect();
     
-    // Adjust horizontal position if tooltip goes off right edge
-    if (left + tooltipRect.width > viewportWidth) {
-      left = viewportWidth - tooltipRect.width - 20;
+    // If tooltip hasn't been laid out yet (width/height = 0), use estimated dimensions
+    if (tooltipRect.width === 0 || tooltipRect.height === 0) {
+      // Use estimated dimensions (typical tooltip size)
+      tooltipRect = {
+        width: 400,
+        height: 200,
+        ...tooltipRect
+      };
+      console.log("⚠️ Tooltip not yet laid out, using estimated dimensions:", tooltipRect);
     }
     
-    // If tooltip goes below viewport, position it above the element instead
-    if (top + tooltipRect.height > viewportHeight) {
-      top = rect.top - tooltipRect.height - 10;
+    let top, left;
+    
+    // If we have a target element, position relative to it
+    if (targetElement && targetElement.isConnected) {
+      try {
+        const rect = targetElement.getBoundingClientRect();
+        
+        // Position below the element with some spacing (using viewport coordinates for fixed positioning)
+        top = rect.bottom + 10;
+        left = rect.left;
+        
+        // Adjust horizontal position if tooltip goes off right edge
+        if (left + tooltipRect.width > viewportWidth) {
+          left = viewportWidth - tooltipRect.width - 20;
+        }
+        
+        // If tooltip goes below viewport, position it above the element instead
+        if (top + tooltipRect.height > viewportHeight) {
+          top = rect.top - tooltipRect.height - 10;
+        }
+        
+        // Ensure minimum positions
+        if (left < 10) {
+          left = 10;
+        }
+        if (top < 10) {
+          top = 10;
+        }
+        
+        console.log("✅ Positioned tooltip relative to target element:", { top, left, rectTop: rect.top, rectBottom: rect.bottom });
+      } catch (rectError) {
+        console.warn("⚠️ Error getting bounding rect for target element, using fallback positioning:", rectError);
+        // Fall through to fallback positioning
+        targetElement = null;
+      }
     }
     
-    // Ensure minimum positions
-    if (left < 10) {
-      left = 10;
-    }
-    if (top < 10) {
-      top = 10;
+    // Fallback positioning if no target element or positioning failed
+    if (!targetElement || !targetElement.isConnected) {
+      console.log("⚠️ No target element found, using fallback positioning");
+      
+      // Try to find active element or any editable element
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.contentEditable === 'true' || activeEl.tagName === 'TEXTAREA' || activeEl.getAttribute('role') === 'textbox')) {
+        try {
+          const rect = activeEl.getBoundingClientRect();
+          top = rect.bottom + 10;
+          left = rect.left;
+          console.log("✅ Positioned tooltip relative to active element:", { top, left });
+        } catch (e) {
+          // Fall through to center positioning
+        }
+      }
+      
+      // If still no position, center it in viewport
+      if (typeof top === 'undefined' || typeof left === 'undefined') {
+        top = Math.max(10, (viewportHeight - tooltipRect.height) / 2);
+        left = Math.max(10, (viewportWidth - tooltipRect.width) / 2);
+        console.log("✅ Positioned tooltip at viewport center:", { top, left });
+      }
     }
     
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/129f1d44-820f-4581-af24-9711702125a2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'content.js:1880',message:'Setting tooltip position',data:{top,left,rectTop:rect.top,rectBottom:rect.bottom,rectLeft:rect.left,scrollY:window.scrollY},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
+    // Apply the position
     tooltip.style.top = `${top}px`;
     tooltip.style.left = `${left}px`;
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/129f1d44-820f-4581-af24-9711702125a2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'content.js:1880',message:'Setting tooltip position',data:{top,left,hasTargetElement:!!targetElement,targetElementConnected:targetElement?.isConnected,viewportWidth,viewportHeight,scrollY:window.scrollY},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
+    
+    // Ensure tooltip is visible
+    tooltip.style.display = 'block';
+    tooltip.style.visibility = 'visible';
+    console.log("✅ Tooltip positioned and made visible:", {
+      top: tooltip.style.top,
+      left: tooltip.style.left,
+      display: tooltip.style.display,
+      visibility: tooltip.style.visibility,
+      zIndex: window.getComputedStyle(tooltip).zIndex
+    });
   };
   
-  // Position tooltip initially
-  updateTooltipPosition();
+  // Position tooltip initially - use requestAnimationFrame to ensure it's rendered first
+  requestAnimationFrame(() => {
+    updateTooltipPosition();
+    // Also position again after a small delay to handle any layout shifts
+    setTimeout(() => {
+      updateTooltipPosition();
+    }, 100);
+  });
   
   // Update position on scroll and resize to keep it attached to the element
   const positionUpdateHandler = () => {

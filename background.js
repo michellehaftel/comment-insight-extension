@@ -51,6 +51,7 @@ async function handleDataLogging(data) {
     ]);
     
     // Prepare data for Google Sheets
+    // NOTE: Column order matches Google Sheet: actual_posted_text, platform, context, escalation_type
     const logData = {
       user_id: userId || 'unknown',
       date: data.date || new Date().toISOString(),
@@ -61,10 +62,10 @@ async function handleDataLogging(data) {
       user_original_text: data.user_original_text || '',
       rephrase_suggestion: data.rephrase_suggestion || '',
       did_user_accept: data.did_user_accept || 'no',
-      actual_posted_text: data.actual_posted_text || '', // NEW FIELD
-      escalation_type: data.escalation_type || 'unknown',
-      platform: data.platform || 'unknown',
-      context: data.context || ''
+      actual_posted_text: data.actual_posted_text || '', // NEW FIELD - Column 10
+      platform: data.platform || 'unknown', // Column 11
+      context: data.context || '', // Column 12
+      escalation_type: data.escalation_type || 'unknown' // Column 13
     };
     
     console.log('📝 Prepared log data:', logData);

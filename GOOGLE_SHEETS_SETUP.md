@@ -9,8 +9,8 @@ This guide will help you set up automatic data logging to Google Sheets for rese
 3. Name it "De-Escalator Research Data"
 4. Set up the following column headers in row 1:
 
-| User ID | Date | Gender | Age | Original Post Content | Original Post Writer | User's Original Content | Rephrase Suggestion | Did User Accept | Platform | Context | Escalation Type |
-|---------|------|--------|-----|----------------------|---------------------|------------------------|-------------------|-----------------|----------|---------|----------------|
+| User ID | Date | Gender | Age | Original Post Content | Original Post Writer | User's Original Content | Rephrase Suggestion | Did User Accept | actual_posted_text | Platform | Context | Escalation Type |
+|---------|------|--------|-----|----------------------|---------------------|------------------------|-------------------|-----------------|-------------------|----------|---------|----------------|
 
 ## Step 2: Create Google Apps Script
 
@@ -34,8 +34,10 @@ function doPost(e) {
       data.user_original_text || '',
       data.rephrase_suggestion || '',
       data.did_user_accept || '',
+      data.actual_posted_text || '',
       data.platform || '',
-      data.context || ''
+      data.context || '',
+      data.escalation_type || ''
     ]);
     
     return ContentService
@@ -61,8 +63,10 @@ function testPost() {
     user_original_text: 'You are always wrong!',
     rephrase_suggestion: 'I often disagree with your perspective.',
     did_user_accept: 'yes',
+    actual_posted_text: 'I often disagree with your perspective.',
     platform: 'twitter',
-    context: 'https://twitter.com'
+    context: 'https://twitter.com',
+    escalation_type: 'cognitive'
   };
   
   const e = {
@@ -151,13 +155,46 @@ async function sendToGoogleSheets(data) {
 }
 ```
 
-## Step 6: Test the Integration
+## Step 6: Verify Column Order
 
-1. Reload the extension in Chrome
-2. Go to Twitter/X
-3. Type escalating text (e.g., "You are always wrong!")
-4. Click either "Rephrase" or "Dismiss"
-5. Check your Google Sheet - you should see a new row with the data!
+**CRITICAL**: Make sure your Google Sheet column headers are in this EXACT order:
+
+| Column # | Header Name |
+|----------|-------------|
+| 1 | User ID |
+| 2 | Date |
+| 3 | Gender |
+| 4 | Age |
+| 5 | Original Post Content |
+| 6 | Original Post Writer |
+| 7 | User's Original Content |
+| 8 | Rephrase Suggestion |
+| 9 | Did User Accept |
+| 10 | **actual_posted_text** ← NEW COLUMN |
+| 11 | Platform |
+| 12 | Context |
+| 13 | Escalation Type |
+
+**If columns are out of order, data will appear in the wrong places!**
+
+## Step 7: Test the Integration
+
+1. **Verify your Google Apps Script is updated:**
+   - Open Extensions → Apps Script
+   - Check that line 37 has: `data.actual_posted_text || '',`
+   - If not, update and redeploy (see Step 2-3)
+
+2. **Verify column order in your Google Sheet matches Step 6 above**
+
+3. Reload the extension in Chrome
+
+4. Go to Twitter/X
+
+5. Type escalating text (e.g., "You are such a mistake and I can't believe you exist")
+
+6. Click either "Rephrase" or "Dismiss" (or post the tweet)
+
+7. Check your Google Sheet - you should see a new row with the data in the correct columns!
 
 ## Troubleshooting
 
@@ -181,6 +218,76 @@ async function sendToGoogleSheets(data) {
 2. Check the Console tab for errors
 3. Look for "Google Sheets URL not configured" warning
 
+### Wrong data appearing in columns (e.g., "twitter" in actual_posted_text column)?
+
+This means your Google Apps Script `appendRow` array has **12 items instead of 13**, so all data after `did_user_accept` is shifted by one position.
+
+**Critical Fix Steps:**
+
+1. **Open Google Apps Script:**
+   - Go to your Google Sheet → Extensions → Apps Script
+
+2. **Count the items in `appendRow` array:**
+   - The array should have **exactly 13 items** (one for each column)
+   - If it has only 12 items, you're missing `data.actual_posted_text || ''`
+
+3. **Replace the ENTIRE `doPost` function with this exact code:**
+   ```javascript
+   function doPost(e) {
+     try {
+       const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+       const data = JSON.parse(e.postData.contents);
+       
+       sheet.appendRow([
+         data.user_id || '',
+         data.date || new Date().toISOString(),
+         data.gender || '',
+         data.age || '',
+         data.original_post_content || '',
+         data.original_post_writer || '',
+         data.user_original_text || '',
+         data.rephrase_suggestion || '',
+         data.did_user_accept || '',
+         data.actual_posted_text || '',  // ← COLUMN 10: This line was missing!
+         data.platform || '',
+         data.context || '',
+         data.escalation_type || ''
+       ]);
+       
+       return ContentService
+         .createTextOutput(JSON.stringify({ success: true, message: 'Data logged successfully' }))
+         .setMimeType(ContentService.MimeType.JSON);
+         
+     } catch (error) {
+       return ContentService
+         .createTextOutput(JSON.stringify({ success: false, error: error.toString() }))
+         .setMimeType(ContentService.MimeType.JSON);
+     }
+   }
+   ```
+
+4. **VERIFY the array has exactly 13 items:**
+   - Count the commas between items in the array
+   - Should be 12 commas = 13 items total
+
+5. **Save and Redeploy:**
+   - Click **Save** (💾) 
+   - Click **Deploy** → **Manage deployments**
+   - Click the **pencil icon ✏️** next to your deployment
+   - Click **Deploy**
+   - Wait 10-15 seconds for deployment to complete
+
+6. **Verify Google Sheet Column Order:**
+   - Column 10 must be: `actual_posted_text`
+   - Column 11 must be: `Platform`
+   - Column 12 must be: `Context`
+   - Column 13 must be: `Escalation Type`
+   - **IMPORTANT**: This matches your current column order - do NOT rearrange columns!
+
+7. **Test with a new interaction:**
+   - The OLD rows will still have wrong data (they can't be fixed)
+   - NEW rows should now have correct data in each column
+
 ## Privacy & Ethics
 
 ⚠️ **Important Research Ethics Notes:**
@@ -202,6 +309,7 @@ async function sendToGoogleSheets(data) {
 - **User's Original Content**: What the user typed (escalating text)
 - **Rephrase Suggestion**: What the extension suggested
 - **Did User Accept**: "yes" if rephrased, "no" if dismissed
+- **actual_posted_text**: The actual text that was posted (may differ from original or rephrased if user edited)
 - **Platform**: Site where interaction took place (Twitter, Facebook, etc.)
 - **Context**: URL of the page where the interaction happened
 - **Escalation Type**: Whether the text was cognitive, emotional, both, or other
