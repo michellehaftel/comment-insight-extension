@@ -462,7 +462,87 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
               }
             } catch (e5) {
               parseAttempts.push('Pattern extraction failed: ' + e5.message);
-              throw new Error('All JSON parsing strategies failed');
+              
+              // Strategy 6: Aggressive JSON repair - try to fix incomplete/truncated JSON
+              try {
+                let cleaned = responseText.trim();
+                const originalLength = cleaned.length;
+                
+                // Remove any text before first {
+                const firstBrace = cleaned.indexOf('{');
+                if (firstBrace > 0) {
+                  cleaned = cleaned.substring(firstBrace);
+                }
+                
+                // Remove any text after last }
+                const lastBrace = cleaned.lastIndexOf('}');
+                if (lastBrace !== -1 && lastBrace < cleaned.length - 1) {
+                  cleaned = cleaned.substring(0, lastBrace + 1);
+                }
+                
+                // If JSON seems incomplete (missing closing brace), try to repair
+                let openBraces = (cleaned.match(/{/g) || []).length;
+                let closeBraces = (cleaned.match(/}/g) || []).length;
+                
+                if (openBraces > closeBraces) {
+                  // Missing closing braces - try to intelligently add them
+                  // Count nested structures
+                  let braceDepth = 0;
+                  let needsClosing = [];
+                  for (let i = 0; i < cleaned.length; i++) {
+                    if (cleaned[i] === '{') braceDepth++;
+                    if (cleaned[i] === '}') braceDepth--;
+                    if (cleaned[i] === '[') needsClosing.push(']');
+                    if (cleaned[i] === ']' && needsClosing.length > 0) needsClosing.pop();
+                  }
+                  
+                  // Add missing closing braces and brackets
+                  cleaned = cleaned + ']'.repeat(needsClosing.length) + '}'.repeat(openBraces - closeBraces);
+                  console.log(`🔧 Repaired JSON: Added ${needsClosing.length} ] and ${openBraces - closeBraces} }`);
+                }
+                
+                // Fix common issues
+                cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1'); // Remove trailing commas
+                cleaned = cleaned.replace(/,(\s*])/g, ']'); // Remove trailing commas in arrays
+                
+                // Try to fix unclosed strings - find strings that aren't closed
+                // Look for patterns like: "key": "unclosed string
+                const unclosedStringPattern = /"([^"]+)":\s*"([^"]*)$/;
+                if (unclosedStringPattern.test(cleaned)) {
+                  // Try to close it
+                  cleaned = cleaned.replace(/"([^"]+)":\s*"([^"]*)$/, '"$1": "$2"');
+                }
+                
+                // Try parsing the cleaned JSON
+                parsed = JSON.parse(cleaned);
+                console.log(`✅ Strategy 6 succeeded: Aggressive JSON repair (${originalLength} → ${cleaned.length} chars)`);
+              } catch (e6) {
+                parseAttempts.push('Aggressive JSON repair failed: ' + e6.message);
+                // Try one more thing: extract just the first complete JSON object even if truncated
+                try {
+                  const firstBrace = responseText.indexOf('{');
+                  if (firstBrace !== -1) {
+                    // Try to build a minimal valid JSON by finding what we have
+                    let minimalJson = responseText.substring(firstBrace);
+                    // If it doesn't end with }, try to make it valid by closing properly
+                    if (!minimalJson.trim().endsWith('}')) {
+                      // Count what we need to close
+                      const openCount = (minimalJson.match(/{/g) || []).length;
+                      const closeCount = (minimalJson.match(/}/g) || []).length;
+                      minimalJson = minimalJson + '}'.repeat(Math.max(0, openCount - closeCount));
+                    }
+                    // Remove trailing commas
+                    minimalJson = minimalJson.replace(/,(\s*[}\]])/g, '$1');
+                    parsed = JSON.parse(minimalJson);
+                    console.log('✅ Strategy 7 succeeded: Minimal JSON extraction');
+                  } else {
+                    throw new Error('No opening brace found for minimal extraction');
+                  }
+                } catch (e7) {
+                  parseAttempts.push('Minimal JSON extraction failed: ' + e7.message);
+                  throw new Error('All JSON parsing strategies failed');
+                }
+              }
             }
           }
         }

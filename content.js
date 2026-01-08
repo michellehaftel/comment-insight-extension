@@ -1093,11 +1093,20 @@ async function rephraseViaAPI(text, context = null) {
         const status = response.status;
         const isRetryableError = status === 429 || (status >= 500 && status < 600);
         
-        // Get error details for logging
+        // Clone response to read it without consuming the stream
+        // This allows us to read it again later if needed
+        const responseClone = response.clone();
+        
+        // Get error details for logging (from clone, so we can read original later)
         try {
-          lastError = await response.json();
+          lastError = await responseClone.json();
         } catch (e) {
-          lastError = { error: `HTTP ${status}`, details: response.statusText };
+          try {
+            const errorText = await responseClone.text();
+            lastError = { error: `HTTP ${status}`, details: errorText || response.statusText };
+          } catch (textErr) {
+            lastError = { error: `HTTP ${status}`, details: response.statusText };
+          }
         }
         
         // If not a retryable error (like 400, 401, etc.), don't retry
@@ -1140,19 +1149,27 @@ async function rephraseViaAPI(text, context = null) {
       console.error('📝 Response status text:', response.statusText);
       
       let errorData;
-      try {
-        const errorText = await response.text();
-        console.error('📄 Raw error response:', errorText);
+      // Use lastError if available (from retry loop), otherwise try to read response
+      if (lastError && typeof lastError === 'object') {
+        errorData = lastError;
+        console.error('📄 Error data from retry loop:', JSON.stringify(errorData, null, 2));
+      } else {
+        // Clone response to avoid "body stream already read" error
         try {
-          errorData = JSON.parse(errorText);
-          console.error('📄 Parsed error response:', JSON.stringify(errorData, null, 2));
-        } catch (parseErr) {
-          console.error('⚠️ Error response is not JSON:', errorText);
-          errorData = { error: errorText, raw: true };
+          const responseClone = response.clone();
+          const errorText = await responseClone.text();
+          console.error('📄 Raw error response:', errorText);
+          try {
+            errorData = JSON.parse(errorText);
+            console.error('📄 Parsed error response:', JSON.stringify(errorData, null, 2));
+          } catch (parseErr) {
+            console.error('⚠️ Error response is not JSON:', errorText);
+            errorData = { error: errorText, raw: true };
+          }
+        } catch (textErr) {
+          console.error('⚠️ Could not read error response:', textErr);
+          errorData = lastError || { error: 'Unknown error', status: response.status };
         }
-      } catch (textErr) {
-        console.error('⚠️ Could not read error response:', textErr);
-        errorData = lastError || { error: 'Unknown error' };
       }
       
       // Better error logging
