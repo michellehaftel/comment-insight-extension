@@ -160,11 +160,15 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
       
       console.log(`📝 Forwarding request to Gemini (text length: ${text.length}, model: ${geminiModel})`);
       console.log(`📝 Prompt length: ${fullPrompt.length}`);
+      console.log(`📝 Prompt size: ~${Math.round(fullPrompt.length / 4)} tokens (est.)`);
+      if (fullPrompt.length > 10000) {
+        console.warn(`⚠️ WARNING: Prompt is very long (${fullPrompt.length} chars). This may cause slow responses or 500 errors.`);
+      }
       
       // Make the actual request with retry logic for transient errors
       let geminiResponse;
       const maxGeminiRetries = 2; // Retry up to 2 times (3 total attempts)
-      const baseRetryDelay = 1000; // 1 second base delay
+      const baseRetryDelay = 2000; // 2 seconds base delay (increased from 1s to give servers more time)
       
       for (let retryAttempt = 0; retryAttempt <= maxGeminiRetries; retryAttempt++) {
         if (retryAttempt > 0) {
@@ -203,6 +207,15 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
             if (axiosError.response) {
               console.error('📄 Gemini API response status:', axiosError.response.status);
               console.error('📄 Gemini API response data:', JSON.stringify(axiosError.response.data, null, 2));
+              console.error('📄 Full error response headers:', JSON.stringify(axiosError.response.headers, null, 2));
+            }
+            if (axiosError.request) {
+              console.error('📄 Request config:', {
+                url: axiosError.config?.url,
+                method: axiosError.config?.method,
+                timeout: axiosError.config?.timeout,
+                dataLength: axiosError.config?.data?.length
+              });
             }
             throw axiosError;
           }
@@ -210,8 +223,15 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
           // Log retryable error and continue to retry
           if (axiosError.response) {
             console.warn(`⚠️ Gemini API returned ${axiosError.response.status} (retryable), will retry...`);
+            console.warn(`📄 Error details:`, axiosError.response.data ? JSON.stringify(axiosError.response.data, null, 2) : 'No error details');
+            if (axiosError.response.status === 500) {
+              console.warn(`💡 500 error typically means: Server overload, rate limiting, or request complexity. Retrying with backoff...`);
+            }
           } else {
             console.warn(`⚠️ Network error calling Gemini (${axiosError.message}), will retry...`);
+            if (axiosError.code === 'ECONNABORTED') {
+              console.warn(`💡 Request timeout - Gemini took longer than ${axiosError.config?.timeout || 45000}ms to respond`);
+            }
           }
         }
       }

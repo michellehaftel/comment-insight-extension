@@ -137,12 +137,109 @@ function detectPlatformName() {
   return host || 'unknown';
 }
 
+// Store the last logged interaction so we can update it with actual posted text
+let lastLoggedInteraction = null;
+let pendingInteractionElement = null;
+
+/**
+ * Monitor post button clicks to capture actual posted text
+ */
+function setupPostButtonMonitoring() {
+  // Only run on Twitter/X for now (can be extended to other platforms)
+  if (!isTwitter()) return;
+  
+  // Twitter/X post button selectors
+  const postButtonSelectors = [
+    '[data-testid="tweetButton"]',
+    '[data-testid="tweetButtonInline"]',
+    'button[type="button"][data-testid*="tweet"]',
+    'div[role="button"][data-testid*="tweet"]',
+    'div[data-testid="tweetButton"]'
+  ];
+  
+  // Monitor clicks on post buttons (use capture phase to catch event early)
+  document.addEventListener('click', (e) => {
+    // Check if clicked element or parent is a post button
+    let target = e.target;
+    let isPostButton = false;
+    
+    // Check element and parents up to 4 levels
+    for (let i = 0; i < 5 && target; i++) {
+      for (const selector of postButtonSelectors) {
+        try {
+          if (target.matches && target.matches(selector)) {
+            isPostButton = true;
+            break;
+          }
+        } catch (err) {
+          // Ignore selector errors
+        }
+      }
+      if (isPostButton) break;
+      target = target.parentElement;
+    }
+    
+    if (isPostButton) {
+      console.log('📮 Post button clicked! Capturing final text...');
+      
+      // Find the active textarea/composer
+      const composer = document.querySelector('[data-testid="tweetTextarea_0"]');
+      if (composer) {
+        const finalText = getTextContent(composer);
+        console.log('📝 Final posted text:', finalText);
+        
+        // If we have a pending interaction, update it with actual posted text
+        if (lastLoggedInteraction) {
+          const updatedData = {
+            ...lastLoggedInteraction,
+            actualPostedText: finalText || ''
+          };
+          
+          // Re-log with actual posted text
+          logInteraction(updatedData);
+          
+          // Clear the stored interaction after logging
+          lastLoggedInteraction = null;
+          pendingInteractionElement = null;
+        } else {
+          // Log standalone post (no escalation detected earlier)
+          logInteraction({
+            usersOriginalContent: finalText || '',
+            rephraseSuggestion: '',
+            didUserAccept: 'not_applicable',
+            escalationType: 'none',
+            actualPostedText: finalText || ''
+          });
+        }
+      }
+    }
+  }, true); // Use capture phase to catch event early
+  
+  console.log('✅ Post button monitoring initialized');
+}
+
 /**
  * Log interaction data to background script for Google Sheets
  */
 async function logInteraction(data) {
   try {
     const postContext = getPostContext();
+    
+    // Store for potential update when post button is clicked (only if not already containing actualPostedText)
+    if (!data.actualPostedText) {
+      lastLoggedInteraction = {
+        usersOriginalContent: data.usersOriginalContent || '',
+        rephraseSuggestion: data.rephraseSuggestion || '',
+        didUserAccept: data.didUserAccept || 'no',
+        escalationType: data.escalationType || 'unknown'
+      };
+      
+      // Try to find and store the element reference
+      const composer = document.querySelector('[data-testid="tweetTextarea_0"]');
+      if (composer) {
+        pendingInteractionElement = composer;
+      }
+    }
     
     // Handle new posts vs replies
     const originalPostContent = postContext.isReply 
@@ -159,6 +256,7 @@ async function logInteraction(data) {
       user_original_text: data.usersOriginalContent || '',
       rephrase_suggestion: data.rephraseSuggestion || '',
       did_user_accept: data.didUserAccept || 'no',
+      actual_posted_text: data.actualPostedText || '', // NEW FIELD
       escalation_type: data.escalationType || 'unknown',
       platform: detectPlatformName(),
       context: window.location.href,
@@ -167,6 +265,9 @@ async function logInteraction(data) {
     
     console.log('📊 Logging interaction:', logData);
     console.log(`📝 Post type: ${postContext.isReply ? 'Reply' : 'New Post'}`);
+    if (data.actualPostedText) {
+      console.log(`✅ Actual posted text: "${data.actualPostedText}"`);
+    }
     
     // Send to background script
     // Check if chrome runtime is available
@@ -2797,6 +2898,10 @@ function initializeObserver() {
   }
 
   console.log("🔍 Initializing escalation detector...");
+  
+  // Initialize post button monitoring to track actual posted text
+  setupPostButtonMonitoring();
+  
   console.log("✅ Extension loaded successfully");
   console.log("⚙️ USE_API:", typeof USE_API !== 'undefined' ? USE_API : 'undefined');
   console.log("⚙️ API_CONFIG.model:", typeof API_CONFIG !== 'undefined' ? API_CONFIG.model : 'undefined');

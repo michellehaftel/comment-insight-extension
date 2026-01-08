@@ -61,6 +61,7 @@ async function handleDataLogging(data) {
       user_original_text: data.user_original_text || '',
       rephrase_suggestion: data.rephrase_suggestion || '',
       did_user_accept: data.did_user_accept || 'no',
+      actual_posted_text: data.actual_posted_text || '', // NEW FIELD
       escalation_type: data.escalation_type || 'unknown',
       platform: data.platform || 'unknown',
       context: data.context || ''
