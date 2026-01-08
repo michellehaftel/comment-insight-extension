@@ -14,9 +14,11 @@ This guide will help you set up automatic data logging to Google Sheets for rese
 
 ## Step 2: Create Google Apps Script
 
+**🎯 EASIEST WAY**: Copy the entire ready-to-use script from `GOOGLE_APPS_SCRIPT_CODE.js` file in this repo!
+
 1. In your Google Sheet, click **Extensions** → **Apps Script**
 2. Delete any existing code
-3. Paste the following code:
+3. **Copy and paste the ENTIRE code** from `GOOGLE_APPS_SCRIPT_CODE.js` OR paste the following code:
 
 ```javascript
 function doPost(e) {
@@ -231,7 +233,7 @@ This means your Google Apps Script `appendRow` array has **12 items instead of 1
    - The array should have **exactly 13 items** (one for each column)
    - If it has only 12 items, you're missing `data.actual_posted_text || ''`
 
-3. **Replace the ENTIRE `doPost` function with this exact code:**
+3. **Copy this EXACT code** - Replace your entire `doPost` function:
    ```javascript
    function doPost(e) {
      try {
@@ -239,19 +241,19 @@ This means your Google Apps Script `appendRow` array has **12 items instead of 1
        const data = JSON.parse(e.postData.contents);
        
        sheet.appendRow([
-         data.user_id || '',
-         data.date || new Date().toISOString(),
-         data.gender || '',
-         data.age || '',
-         data.original_post_content || '',
-         data.original_post_writer || '',
-         data.user_original_text || '',
-         data.rephrase_suggestion || '',
-         data.did_user_accept || '',
-         data.actual_posted_text || '',  // ← COLUMN 10: This line was missing!
-         data.platform || '',
-         data.context || '',
-         data.escalation_type || ''
+         data.user_id || '',                    // Column 1
+         data.date || new Date().toISOString(), // Column 2
+         data.gender || '',                     // Column 3
+         data.age || '',                        // Column 4
+         data.original_post_content || '',      // Column 5
+         data.original_post_writer || '',       // Column 6
+         data.user_original_text || '',         // Column 7
+         data.rephrase_suggestion || '',        // Column 8
+         data.did_user_accept || '',            // Column 9
+         data.actual_posted_text || '',         // Column 10 (J) ← MUST BE HERE!
+         data.platform || '',                   // Column 11 (K) ← MUST be after actual_posted_text!
+         data.context || '',                    // Column 12 (L) ← MUST be after platform!
+         data.escalation_type || ''             // Column 13 (M) ← MUST be last!
        ]);
        
        return ContentService
@@ -265,10 +267,15 @@ This means your Google Apps Script `appendRow` array has **12 items instead of 1
      }
    }
    ```
-
-4. **VERIFY the array has exactly 13 items:**
-   - Count the commas between items in the array
-   - Should be 12 commas = 13 items total
+   
+4. **VERIFY BEFORE SAVING** - Check your code matches EXACTLY:
+   - Line after `data.did_user_accept || '',` must be: `data.actual_posted_text || '',`
+   - **Next line MUST be**: `data.platform || '',` (NOT escalation_type!)
+   - **Next line MUST be**: `data.context || '',` (NOT platform!)
+   - **Last line MUST be**: `data.escalation_type || ''` (NOT context!)
+   - **Count commas in the array**: Should be exactly 12 commas (means 13 items)
+   - **❌ WRONG ORDER**: If you see `escalation_type` before `platform`, your order is wrong!
+   - **✅ CORRECT ORDER**: `actual_posted_text` → `platform` → `context` → `escalation_type`
 
 5. **Save and Redeploy:**
    - Click **Save** (💾) 
@@ -277,16 +284,72 @@ This means your Google Apps Script `appendRow` array has **12 items instead of 1
    - Click **Deploy**
    - Wait 10-15 seconds for deployment to complete
 
-6. **Verify Google Sheet Column Order:**
-   - Column 10 must be: `actual_posted_text`
-   - Column 11 must be: `Platform`
-   - Column 12 must be: `Context`
-   - Column 13 must be: `Escalation Type`
-   - **IMPORTANT**: This matches your current column order - do NOT rearrange columns!
+6. **Verify Google Sheet Column Order matches EXACTLY:**
+   - Column A (1): `user_id`
+   - Column B (2): `date`
+   - Column C (3): `gender`
+   - Column D (4): `age`
+   - Column E (5): `original_post_content`
+   - Column F (6): `original_post_writer`
+   - Column G (7): `user_original_text`
+   - Column H (8): `rephrase_suggestion`
+   - Column I (9): `did_user_accept`
+   - Column J (10): `actual_posted_text` ← Your sheet shows this ✓
+   - Column K (11): `platform` ← Your sheet shows this ✓
+   - Column L (12): `context` ← Your sheet shows this ✓
+   - Column M (13): `escalation_type` ← Your sheet shows this ✓
+   
+   **Your column order is correct!** The issue is your Google Apps Script code doesn't match.
 
-7. **Test with a new interaction:**
+7. **VERIFY THE SCRIPT WAS ACTUALLY UPDATED:**
+   - After saving and redeploying, open the script again
+   - Check that `data.actual_posted_text || '',` appears in the array
+   - **Common mistake**: People update the script but forget to redeploy!
+   - **Double-check deployment**: Deploy → Manage deployments → Your deployment should show the latest version
+
+8. **OPTIONAL: Add a test function to verify your script is correct:**
+   
+   Add this function to your Google Apps Script to test:
+   ```javascript
+   function testDataOrder() {
+     const testData = {
+       user_id: 'test_user',
+       date: new Date().toISOString(),
+       gender: 'female',
+       age: 25,
+       original_post_content: 'Test post',
+       original_post_writer: '@test',
+       user_original_text: 'You are wrong!',
+       rephrase_suggestion: 'I disagree',
+       did_user_accept: 'yes',
+       actual_posted_text: 'I disagree', // Should go to Column J
+       platform: 'twitter',              // Should go to Column K
+       context: 'https://x.com/test',    // Should go to Column L
+       escalation_type: 'emotional'      // Should go to Column M
+     };
+     
+     const e = {
+       postData: {
+         contents: JSON.stringify(testData)
+       }
+     };
+     
+     const result = doPost(e);
+     Logger.log('Test result: ' + result.getContent());
+     Logger.log('Check your sheet - columns J, K, L, M should match the test data above');
+   }
+   ```
+   
+   Then run it: **Run → testDataOrder** and check the execution log and your sheet.
+
+9. **Test with a new interaction:**
    - The OLD rows will still have wrong data (they can't be fixed)
-   - NEW rows should now have correct data in each column
+   - Create a NEW test interaction in the extension
+   - NEW rows should now show:
+     - Column J (`actual_posted_text`): The actual text that was posted
+     - Column K (`platform`): "twitter" 
+     - Column L (`context`): The URL (e.g., "https://x.com/home")
+     - Column M (`escalation_type`): "emotional", "cognitive", or "both"
 
 ## Privacy & Ethics
 
