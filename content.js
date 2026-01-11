@@ -532,6 +532,14 @@ function isEscalating(text) {
     reasons.push("Categorical absolutist pattern (once X, always X)");
   }
   
+  // Catch "only [verb]" categorical patterns (e.g., "only cares about", "only wants", "only thinks about")
+  // This is very categorical/absolute language
+  const onlyVerbPattern = /\bonly (?:cares?|cared|wants?|wanted|thinks?|thought|thinks about|cares about|wants? about|does|did|knows?|know|sees?|saw|understands?|understood|believes?|believed|matters?|mattered|interests?|interested)\b/i;
+  if (onlyVerbPattern.test(trimmedText)) {
+    escalationScore += 1.5;
+    reasons.push("Categorical/absolute language (only [verb])");
+  }
+  
   // Count occurrences of categorical words
   let categoricalCount = 0;
   categoricalWords.forEach(pattern => {
@@ -539,14 +547,10 @@ function isEscalating(text) {
     if (matches) categoricalCount += matches.length;
   });
   
-  // For short texts (< 50 chars), even 1 categorical word is significant
-  // For longer texts, need 2+ to be significant
-  if (categoricalCount >= 2) {
-    escalationScore += 1.5;
-    reasons.push("Multiple categorical/absolute words");
-  } else if (categoricalCount === 1 && trimmedText.length < 50) {
+  // Categorical words indicate absolute/black-and-white thinking - escalatory regardless of text length
+  if (categoricalCount >= 1) {
     escalationScore += 1;
-    reasons.push("Categorical/absolute language in short text");
+    reasons.push("Categorical/absolute language");
   }
 
   // ===== EMOTIONAL DIMENSION: Blame =====
