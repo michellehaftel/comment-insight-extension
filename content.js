@@ -2482,13 +2482,14 @@ async function createEscalationTooltip(originalText, element, escalationType = '
       e.stopPropagation();
       console.log("🚫 Dismiss button clicked - closing tooltip");
       
-      // Log that user dismissed the suggestion (rephrasedText may be empty if still loading)
-      logInteraction({
+      // Store interaction data for logging when post button is clicked (don't log now)
+      lastLoggedInteraction = {
         usersOriginalContent: originalText,
         rephraseSuggestion: (rephrasedText && typeof rephrasedText === 'string') ? rephrasedText : '', // May be empty if dismissed during loading or error
         didUserAccept: 'no',
         escalationType
-      });
+      };
+      console.log("💾 Stored interaction data (will log when post button is clicked):", lastLoggedInteraction);
       
       // Clean up position handlers and remove tooltip
       if (tooltip && tooltip.parentNode) {
@@ -2765,13 +2766,14 @@ async function createEscalationTooltip(originalText, element, escalationType = '
         if (wasReplaced) {
           console.log("✅ Text successfully rephrased! New text:", verifyText);
           
-          // Log that user accepted the suggestion
-          logInteraction({
+          // Store interaction data for logging when post button is clicked (don't log now)
+          lastLoggedInteraction = {
             usersOriginalContent: originalText,
             rephraseSuggestion: rephrasedText,
             didUserAccept: 'yes',
             escalationType
-          });
+          };
+          console.log("💾 Stored interaction data (will log when post button is clicked):", lastLoggedInteraction);
           
           // Show "Good job!" tooltip
           console.log("🎉 Calling showSuccessTooltip with element:", elementToRephrase);

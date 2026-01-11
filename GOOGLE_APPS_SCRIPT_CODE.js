@@ -22,9 +22,10 @@
  * K: rephrase_suggestion
  * L: did_user_accept
  * M: actual_posted_text
- * N: platform
- * O: context
- * P: escalation_type
+ * N: delta
+ * O: platform
+ * P: context
+ * Q: escalation_type
  */
 
 function doPost(e) {
@@ -46,9 +47,10 @@ function doPost(e) {
       data.rephrase_suggestion || '',        // Column K (11)
       data.did_user_accept || '',            // Column L (12)
       data.actual_posted_text || '',         // Column M (13)
-      data.platform || '',                   // Column N (14)
-      data.context || '',                    // Column O (15)
-      data.escalation_type || ''             // Column P (16)
+      data.delta || '',                      // Column N (14) - Delta between actual_posted_text and rephrase_suggestion
+      data.platform || '',                   // Column O (15)
+      data.context || '',                    // Column P (16)
+      data.escalation_type || ''             // Column Q (17)
     ]);
     
     return ContentService
@@ -81,9 +83,10 @@ function testDataOrder() {
     rephrase_suggestion: 'I often disagree with your perspective.',
     did_user_accept: 'yes',
     actual_posted_text: 'I often disagree with your perspective.', // Should appear in Column M
-    platform: 'twitter',                                          // Should appear in Column N
-    context: 'https://x.com/test',                                // Should appear in Column O
-    escalation_type: 'emotional'                                  // Should appear in Column P
+    delta: '',                                                    // Should appear in Column N
+    platform: 'twitter',                                          // Should appear in Column O
+    context: 'https://x.com/test',                                // Should appear in Column P
+    escalation_type: 'emotional'                                  // Should appear in Column Q
   };
   
   const e = {

@@ -9,8 +9,8 @@ This guide will help you set up automatic data logging to Google Sheets for rese
 3. Name it "De-Escalator Research Data"
 4. Set up the following column headers in row 1:
 
-| User ID | Date | Gender | Age | Sector | Country | City | Original Post Content | Original Post Writer | User's Original Content | Rephrase Suggestion | Did User Accept | actual_posted_text | Platform | Context | Escalation Type |
-|---------|------|--------|-----|--------|---------|------|----------------------|---------------------|------------------------|-------------------|-----------------|-------------------|----------|---------|----------------|
+| User ID | Date | Gender | Age | Sector | Country | City | Original Post Content | Original Post Writer | User's Original Content | Rephrase Suggestion | Did User Accept | actual_posted_text | Delta | Platform | Context | Escalation Type |
+|---------|------|--------|-----|--------|---------|------|----------------------|---------------------|------------------------|-------------------|-----------------|-------------------|-------|----------|---------|----------------|
 
 ## Step 2: Create Google Apps Script
 
@@ -170,15 +170,19 @@ async function sendToGoogleSheets(data) {
 | 2 | Date |
 | 3 | Gender |
 | 4 | Age |
-| 5 | Original Post Content |
-| 6 | Original Post Writer |
-| 7 | User's Original Content |
-| 8 | Rephrase Suggestion |
-| 9 | Did User Accept |
-| 10 | **actual_posted_text** ← NEW COLUMN |
-| 11 | Platform |
-| 12 | Context |
-| 13 | Escalation Type |
+| 5 | Sector |
+| 6 | Country |
+| 7 | City |
+| 8 | Original Post Content |
+| 9 | Original Post Writer |
+| 10 | User's Original Content |
+| 11 | Rephrase Suggestion |
+| 12 | Did User Accept |
+| 13 | **actual_posted_text** |
+| 14 | **Delta** |
+| 15 | Platform |
+| 16 | Context |
+| 17 | Escalation Type |
 
 **If columns are out of order, data will appear in the wrong places!**
 
@@ -304,9 +308,10 @@ This means your Google Apps Script `appendRow` array has **12 items instead of 1
    - Column K (11): `rephrase_suggestion`
    - Column L (12): `did_user_accept`
    - Column M (13): `actual_posted_text`
-   - Column N (14): `platform`
-   - Column O (15): `context`
-   - Column P (16): `escalation_type`
+   - Column N (14): `delta`
+   - Column O (15): `platform`
+   - Column P (16): `context`
+   - Column Q (17): `escalation_type`
    
    **Make sure your column order matches exactly!**
 
@@ -334,10 +339,11 @@ This means your Google Apps Script `appendRow` array has **12 items instead of 1
        user_original_text: 'You are wrong!',
        rephrase_suggestion: 'I disagree',
        did_user_accept: 'yes',
-       actual_posted_text: 'I disagree', // Should go to Column M
-       platform: 'twitter',              // Should go to Column N
-       context: 'https://x.com/test',    // Should go to Column O
-       escalation_type: 'emotional'      // Should go to Column P
+      actual_posted_text: 'I disagree', // Should go to Column M
+      delta: '',                         // Should go to Column N
+      platform: 'twitter',              // Should go to Column O
+      context: 'https://x.com/test',    // Should go to Column P
+      escalation_type: 'emotional'      // Should go to Column Q
      };
      
      const e = {
@@ -349,7 +355,7 @@ This means your Google Apps Script `appendRow` array has **12 items instead of 1
      const result = doPost(e);
      Logger.log('Test result: ' + result.getContent());
      Logger.log('✅ Check your sheet - a new row should have been added.');
-     Logger.log('Verify columns M, N, O, P match the test data above.');
+     Logger.log('Verify columns M, N, O, P, Q match the test data above.');
    }
    ```
    
@@ -386,6 +392,7 @@ This means your Google Apps Script `appendRow` array has **12 items instead of 1
 - **Rephrase Suggestion**: What the extension suggested
 - **Did User Accept**: "yes" if rephrased, "no" if dismissed
 - **actual_posted_text**: The actual text that was posted (may differ from original or rephrased if user edited)
+- **Delta**: The difference between actual_posted_text and rephrase_suggestion (shows what text was added/changed by the user after seeing the rephrase)
 - **Platform**: Site where interaction took place (Twitter, Facebook, etc.)
 - **Context**: URL of the page where the interaction happened
 - **Escalation Type**: Whether the text was cognitive, emotional, both, or other

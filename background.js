@@ -39,6 +39,38 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // Handle data logging to Google Sheets
+// Calculate delta (difference) between actual_posted_text and rephrase_suggestion
+function calculateDelta(actualText, rephraseText) {
+  if (!actualText || !rephraseText) {
+    return '';
+  }
+  
+  const actual = actualText.trim();
+  const rephrase = rephraseText.trim();
+  
+  // If they're identical, no delta
+  if (actual === rephrase) {
+    return '';
+  }
+  
+  // If actual text starts with rephrase text, the delta is what comes after
+  if (actual.startsWith(rephrase)) {
+    const delta = actual.substring(rephrase.length).trim();
+    // Remove leading punctuation/whitespace that might be part of the rephrase
+    return delta.replace(/^[.,;:!?\s]+/, '').trim();
+  }
+  
+  // If rephrase text starts with actual text, delta is negative (text was removed)
+  if (rephrase.startsWith(actual)) {
+    const removed = rephrase.substring(actual.length).trim();
+    return `[REMOVED: ${removed}]`;
+  }
+  
+  // Otherwise, return the difference (for now, return what was added)
+  // This is a simple implementation - could be enhanced with diff algorithms
+  return actual.replace(rephrase, '').trim();
+}
+
 async function handleDataLogging(data) {
   try {
     console.log('📊 Logging interaction data:', data);
@@ -54,8 +86,11 @@ async function handleDataLogging(data) {
       'userCity'
     ]);
     
+    // Calculate delta between actual_posted_text and rephrase_suggestion
+    const delta = calculateDelta(data.actual_posted_text || '', data.rephrase_suggestion || '');
+    
     // Prepare data for Google Sheets
-    // NOTE: Column order matches Google Sheet: actual_posted_text, platform, context, escalation_type
+    // NOTE: Column order matches Google Sheet
     const logData = {
       user_id: userId || 'unknown',
       date: data.date || new Date().toISOString(),
@@ -69,10 +104,11 @@ async function handleDataLogging(data) {
       user_original_text: data.user_original_text || '',
       rephrase_suggestion: data.rephrase_suggestion || '',
       did_user_accept: data.did_user_accept || 'no',
-      actual_posted_text: data.actual_posted_text || '', // Column 10
-      platform: data.platform || 'unknown', // Column 11
-      context: data.context || '', // Column 12
-      escalation_type: data.escalation_type || 'unknown' // Column 13
+      actual_posted_text: data.actual_posted_text || '',
+      delta: delta, // NEW: Delta between actual_posted_text and rephrase_suggestion
+      platform: data.platform || 'unknown',
+      context: data.context || '',
+      escalation_type: data.escalation_type || 'unknown'
     };
     
     console.log('📝 Prepared log data:', logData);
