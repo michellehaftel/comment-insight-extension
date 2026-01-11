@@ -1066,11 +1066,20 @@ async function rephraseViaAPI(text, context = null) {
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       if (attempt > 0) {
         // Wait before retry (exponential backoff with jitter)
-        const exponentialDelay = baseDelay * Math.pow(2, attempt - 1);
-        // Add random jitter (0-500ms) to avoid thundering herd
-        const jitter = Math.random() * 500;
+        // Check if previous error indicated overload - use longer delays
+        const errorDetails = lastError?.details || '';
+        const isOverloaded = typeof errorDetails === 'string' && 
+                            errorDetails.toLowerCase().includes('overloaded');
+        
+        // For overloaded scenarios, use longer exponential backoff: 3s, 6s, 12s, 24s
+        // For other errors, use: 1s, 2s, 4s, 8s
+        const baseRetryDelay = isOverloaded ? 3000 : baseDelay;
+        const exponentialDelay = Math.min(baseRetryDelay * Math.pow(2, attempt - 1), isOverloaded ? 24000 : 8000);
+        // Add random jitter (0-1000ms for overload, 0-500ms otherwise)
+        const jitter = isOverloaded ? Math.random() * 1000 : Math.random() * 500;
         const delay = exponentialDelay + jitter;
-        console.log(`⏳ Retrying after error. Waiting ${(delay/1000).toFixed(2)}s before retry ${attempt}/${maxRetries}...`);
+        const reason = isOverloaded ? ' (model overloaded - using longer delay)' : '';
+        console.log(`⏳ Retrying after error. Waiting ${(delay/1000).toFixed(2)}s before retry ${attempt}/${maxRetries}...${reason}`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
       

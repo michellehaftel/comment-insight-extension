@@ -168,12 +168,24 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
       // Make the actual request with retry logic for transient errors
       let geminiResponse;
       const maxGeminiRetries = 2; // Retry up to 2 times (3 total attempts)
-      const baseRetryDelay = 2000; // 2 seconds base delay (increased from 1s to give servers more time)
+      const baseRetryDelay = 3000; // 3 seconds base delay (increased for overload scenarios)
+      let lastAxiosError = null;
       
       for (let retryAttempt = 0; retryAttempt <= maxGeminiRetries; retryAttempt++) {
         if (retryAttempt > 0) {
-          const delay = baseRetryDelay * Math.pow(2, retryAttempt - 1) + Math.random() * 500; // Exponential backoff with jitter
-          console.log(`⏳ Retrying Gemini API call (attempt ${retryAttempt + 1}/${maxGeminiRetries + 1}) after ${(delay/1000).toFixed(2)}s...`);
+          // Check if previous error indicated overload - use longer delays
+          const prevError = lastAxiosError?.response?.data?.error?.message || 
+                           lastAxiosError?.response?.data?.message || 
+                           JSON.stringify(lastAxiosError?.response?.data || {});
+          const isOverloaded = typeof prevError === 'string' && 
+                              prevError.toLowerCase().includes('overloaded');
+          
+          // For overloaded scenarios, use longer exponential backoff: 5s, 10s, 20s
+          // For other errors, use: 3s, 6s, 12s
+          const baseDelay = isOverloaded ? 5000 : baseRetryDelay;
+          const delay = baseDelay * Math.pow(2, retryAttempt - 1) + Math.random() * (isOverloaded ? 1000 : 500);
+          const reason = isOverloaded ? ' (model overloaded - using longer delay)' : '';
+          console.log(`⏳ Retrying Gemini API call (attempt ${retryAttempt + 1}/${maxGeminiRetries + 1}) after ${(delay/1000).toFixed(2)}s...${reason}`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
         
@@ -201,6 +213,11 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
             (axiosError.response.status >= 500 && axiosError.response.status < 600) || // Server errors
             axiosError.response.status === 429; // Rate limit (though we handle this separately)
           
+          // Store error for next retry delay calculation (if we'll retry)
+          if (isRetryable && retryAttempt < maxGeminiRetries) {
+            lastAxiosError = axiosError;
+          }
+          
           if (!isRetryable || retryAttempt === maxGeminiRetries) {
             // Not retryable or last attempt - throw the error
             console.error('❌ Axios error calling Gemini:', axiosError.message);
@@ -222,10 +239,19 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
           
           // Log retryable error and continue to retry
           if (axiosError.response) {
-            console.warn(`⚠️ Gemini API returned ${axiosError.response.status} (retryable), will retry...`);
+            const errorMessage = axiosError.response?.data?.error?.message || 
+                                axiosError.response?.data?.message || 
+                                JSON.stringify(axiosError.response?.data || {});
+            const isOverloaded = typeof errorMessage === 'string' && 
+                                errorMessage.toLowerCase().includes('overloaded');
+            if (isOverloaded) {
+              console.warn(`⚠️ Gemini model is overloaded (${axiosError.response.status}). Will use longer retry delays on next attempt.`);
+            } else {
+              console.warn(`⚠️ Gemini API returned ${axiosError.response.status} (retryable), will retry...`);
+            }
             console.warn(`📄 Error details:`, axiosError.response.data ? JSON.stringify(axiosError.response.data, null, 2) : 'No error details');
-            if (axiosError.response.status === 500) {
-              console.warn(`💡 500 error typically means: Server overload, rate limiting, or request complexity. Retrying with backoff...`);
+            if (axiosError.response.status === 500 || axiosError.response.status === 503) {
+              console.warn(`💡 ${axiosError.response.status} error typically means: Server overload, rate limiting, or request complexity. Retrying with backoff...`);
             }
           } else {
             console.warn(`⚠️ Network error calling Gemini (${axiosError.message}), will retry...`);
