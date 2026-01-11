@@ -68,7 +68,8 @@ function calculateDelta(actualText, rephraseText) {
   
   // Otherwise, return the difference (for now, return what was added)
   // This is a simple implementation - could be enhanced with diff algorithms
-  return actual.replace(rephrase, '').trim();
+  // Use replaceAll to handle cases where rephrase text appears multiple times
+  return actual.replaceAll(rephrase, '').trim();
 }
 
 async function handleDataLogging(data) {

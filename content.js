@@ -137,7 +137,10 @@ function detectPlatformName() {
   return host || 'unknown';
 }
 
-// Store the last logged interaction so we can update it with actual posted text
+// Store the most recent interaction so we can log it with actual posted text when post button is clicked
+// NOTE: If user triggers multiple escalations in one session (dismiss/accept multiple times),
+// only the most recent interaction is stored and logged. This is intentional - there's only
+// one final posted text per post, so we can only log one interaction per post.
 let lastLoggedInteraction = null;
 let pendingInteractionElement = null;
 
