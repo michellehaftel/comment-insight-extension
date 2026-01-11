@@ -9,8 +9,8 @@ This guide will help you set up automatic data logging to Google Sheets for rese
 3. Name it "De-Escalator Research Data"
 4. Set up the following column headers in row 1:
 
-| User ID | Date | Gender | Age | Original Post Content | Original Post Writer | User's Original Content | Rephrase Suggestion | Did User Accept | actual_posted_text | Platform | Context | Escalation Type |
-|---------|------|--------|-----|----------------------|---------------------|------------------------|-------------------|-----------------|-------------------|----------|---------|----------------|
+| User ID | Date | Gender | Age | Sector | Country | City | Original Post Content | Original Post Writer | User's Original Content | Rephrase Suggestion | Did User Accept | actual_posted_text | Platform | Context | Escalation Type |
+|---------|------|--------|-----|--------|---------|------|----------------------|---------------------|------------------------|-------------------|-----------------|-------------------|----------|---------|----------------|
 
 ## Step 2: Create Google Apps Script
 
@@ -31,6 +31,9 @@ function doPost(e) {
       data.date || new Date().toISOString(),
       data.gender || '',
       data.age || '',
+      data.sector || '',
+      data.country || '',
+      data.city || '',
       data.original_post_content || '',
       data.original_post_writer || '',
       data.user_original_text || '',
@@ -245,15 +248,18 @@ This means your Google Apps Script `appendRow` array has **12 items instead of 1
          data.date || new Date().toISOString(), // Column 2
          data.gender || '',                     // Column 3
          data.age || '',                        // Column 4
-         data.original_post_content || '',      // Column 5
-         data.original_post_writer || '',       // Column 6
-         data.user_original_text || '',         // Column 7
-         data.rephrase_suggestion || '',        // Column 8
-         data.did_user_accept || '',            // Column 9
-         data.actual_posted_text || '',         // Column 10 (J) ← MUST BE HERE!
-         data.platform || '',                   // Column 11 (K) ← MUST be after actual_posted_text!
-         data.context || '',                    // Column 12 (L) ← MUST be after platform!
-         data.escalation_type || ''             // Column 13 (M) ← MUST be last!
+         data.sector || '',                     // Column 5
+         data.country || '',                    // Column 6
+         data.city || '',                       // Column 7
+         data.original_post_content || '',      // Column 8
+         data.original_post_writer || '',       // Column 9
+         data.user_original_text || '',         // Column 10
+         data.rephrase_suggestion || '',        // Column 11
+         data.did_user_accept || '',            // Column 12
+         data.actual_posted_text || '',         // Column 13
+         data.platform || '',                   // Column 14
+         data.context || '',                    // Column 15
+         data.escalation_type || ''             // Column 16
        ]);
        
        return ContentService
@@ -289,17 +295,20 @@ This means your Google Apps Script `appendRow` array has **12 items instead of 1
    - Column B (2): `date`
    - Column C (3): `gender`
    - Column D (4): `age`
-   - Column E (5): `original_post_content`
-   - Column F (6): `original_post_writer`
-   - Column G (7): `user_original_text`
-   - Column H (8): `rephrase_suggestion`
-   - Column I (9): `did_user_accept`
-   - Column J (10): `actual_posted_text` ← Your sheet shows this ✓
-   - Column K (11): `platform` ← Your sheet shows this ✓
-   - Column L (12): `context` ← Your sheet shows this ✓
-   - Column M (13): `escalation_type` ← Your sheet shows this ✓
+   - Column E (5): `sector`
+   - Column F (6): `country`
+   - Column G (7): `city`
+   - Column H (8): `original_post_content`
+   - Column I (9): `original_post_writer`
+   - Column J (10): `user_original_text`
+   - Column K (11): `rephrase_suggestion`
+   - Column L (12): `did_user_accept`
+   - Column M (13): `actual_posted_text`
+   - Column N (14): `platform`
+   - Column O (15): `context`
+   - Column P (16): `escalation_type`
    
-   **Your column order is correct!** The issue is your Google Apps Script code doesn't match.
+   **Make sure your column order matches exactly!**
 
 7. **VERIFY THE SCRIPT WAS ACTUALLY UPDATED:**
    - After saving and redeploying, open the script again
@@ -317,15 +326,18 @@ This means your Google Apps Script `appendRow` array has **12 items instead of 1
        date: new Date().toISOString(),
        gender: 'female',
        age: 25,
+       sector: 'secular',
+       country: 'United States',
+       city: 'New York',
        original_post_content: 'Test post',
        original_post_writer: '@test',
        user_original_text: 'You are wrong!',
        rephrase_suggestion: 'I disagree',
        did_user_accept: 'yes',
-       actual_posted_text: 'I disagree', // Should go to Column J
-       platform: 'twitter',              // Should go to Column K
-       context: 'https://x.com/test',    // Should go to Column L
-       escalation_type: 'emotional'      // Should go to Column M
+       actual_posted_text: 'I disagree', // Should go to Column M
+       platform: 'twitter',              // Should go to Column N
+       context: 'https://x.com/test',    // Should go to Column O
+       escalation_type: 'emotional'      // Should go to Column P
      };
      
      const e = {
@@ -336,7 +348,8 @@ This means your Google Apps Script `appendRow` array has **12 items instead of 1
      
      const result = doPost(e);
      Logger.log('Test result: ' + result.getContent());
-     Logger.log('Check your sheet - columns J, K, L, M should match the test data above');
+     Logger.log('✅ Check your sheet - a new row should have been added.');
+     Logger.log('Verify columns M, N, O, P match the test data above.');
    }
    ```
    
@@ -346,10 +359,10 @@ This means your Google Apps Script `appendRow` array has **12 items instead of 1
    - The OLD rows will still have wrong data (they can't be fixed)
    - Create a NEW test interaction in the extension
    - NEW rows should now show:
-     - Column J (`actual_posted_text`): The actual text that was posted
-     - Column K (`platform`): "twitter" 
-     - Column L (`context`): The URL (e.g., "https://x.com/home")
-     - Column M (`escalation_type`): "emotional", "cognitive", or "both"
+     - Column M (`actual_posted_text`): The actual text that was posted
+     - Column N (`platform`): "twitter" 
+     - Column O (`context`): The URL (e.g., "https://x.com/home")
+     - Column P (`escalation_type`): "emotional", "cognitive", or "both"
 
 ## Privacy & Ethics
 

@@ -44,10 +44,14 @@ async function handleDataLogging(data) {
     console.log('📊 Logging interaction data:', data);
     
     // Get user info from storage
-    const { userId, userGender, userAge } = await chrome.storage.local.get([
+    const { userId, userGender, userAge, userSector, userCountry, userCountryName, userCity } = await chrome.storage.local.get([
       'userId',
       'userGender',
-      'userAge'
+      'userAge',
+      'userSector',
+      'userCountry',
+      'userCountryName',
+      'userCity'
     ]);
     
     // Prepare data for Google Sheets
@@ -57,12 +61,15 @@ async function handleDataLogging(data) {
       date: data.date || new Date().toISOString(),
       gender: userGender || 'unknown',
       age: userAge || 'unknown',
+      sector: userSector || 'unknown',
+      country: userCountryName || userCountry || 'unknown',
+      city: userCity || 'unknown',
       original_post_content: data.original_post_content || '',
       original_post_writer: data.original_post_writer || '',
       user_original_text: data.user_original_text || '',
       rephrase_suggestion: data.rephrase_suggestion || '',
       did_user_accept: data.did_user_accept || 'no',
-      actual_posted_text: data.actual_posted_text || '', // NEW FIELD - Column 10
+      actual_posted_text: data.actual_posted_text || '', // Column 10
       platform: data.platform || 'unknown', // Column 11
       context: data.context || '', // Column 12
       escalation_type: data.escalation_type || 'unknown' // Column 13

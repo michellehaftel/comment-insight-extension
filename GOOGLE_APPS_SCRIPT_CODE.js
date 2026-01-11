@@ -13,15 +13,18 @@
  * B: date
  * C: gender
  * D: age
- * E: original_post_content
- * F: original_post_writer
- * G: user_original_text
- * H: rephrase_suggestion
- * I: did_user_accept
- * J: actual_posted_text
- * K: platform
- * L: context
- * M: escalation_type
+ * E: sector
+ * F: country
+ * G: city
+ * H: original_post_content
+ * I: original_post_writer
+ * J: user_original_text
+ * K: rephrase_suggestion
+ * L: did_user_accept
+ * M: actual_posted_text
+ * N: platform
+ * O: context
+ * P: escalation_type
  */
 
 function doPost(e) {
@@ -34,15 +37,18 @@ function doPost(e) {
       data.date || new Date().toISOString(), // Column B (2)
       data.gender || '',                     // Column C (3)
       data.age || '',                        // Column D (4)
-      data.original_post_content || '',      // Column E (5)
-      data.original_post_writer || '',       // Column F (6)
-      data.user_original_text || '',         // Column G (7)
-      data.rephrase_suggestion || '',        // Column H (8)
-      data.did_user_accept || '',            // Column I (9)
-      data.actual_posted_text || '',         // Column J (10)
-      data.platform || '',                   // Column K (11)
-      data.context || '',                    // Column L (12)
-      data.escalation_type || ''             // Column M (13)
+      data.sector || '',                     // Column E (5)
+      data.country || '',                    // Column F (6)
+      data.city || '',                       // Column G (7)
+      data.original_post_content || '',      // Column H (8)
+      data.original_post_writer || '',       // Column I (9)
+      data.user_original_text || '',         // Column J (10)
+      data.rephrase_suggestion || '',        // Column K (11)
+      data.did_user_accept || '',            // Column L (12)
+      data.actual_posted_text || '',         // Column M (13)
+      data.platform || '',                   // Column N (14)
+      data.context || '',                    // Column O (15)
+      data.escalation_type || ''             // Column P (16)
     ]);
     
     return ContentService
@@ -66,15 +72,18 @@ function testDataOrder() {
     date: new Date().toISOString(),
     gender: 'female',
     age: 25,
+    sector: 'secular',
+    country: 'United States',
+    city: 'New York',
     original_post_content: 'This is a test post',
     original_post_writer: '@testuser',
     user_original_text: 'You are always wrong!',
     rephrase_suggestion: 'I often disagree with your perspective.',
     did_user_accept: 'yes',
-    actual_posted_text: 'I often disagree with your perspective.', // Should appear in Column J
-    platform: 'twitter',                                          // Should appear in Column K
-    context: 'https://x.com/test',                                // Should appear in Column L
-    escalation_type: 'emotional'                                  // Should appear in Column M
+    actual_posted_text: 'I often disagree with your perspective.', // Should appear in Column M
+    platform: 'twitter',                                          // Should appear in Column N
+    context: 'https://x.com/test',                                // Should appear in Column O
+    escalation_type: 'emotional'                                  // Should appear in Column P
   };
   
   const e = {
