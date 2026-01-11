@@ -489,6 +489,7 @@ function isEscalating(text) {
     /\b(that's not true|that is not true|that's false)\b/i,
     /\b(you don't understand|you don't get it)\b/i,
     /\b(that's ridiculous|that's absurd|that's stupid)\b/i,
+    /\b(that's (?:a|an) (?:stupid|ridiculous|absurd|terrible|awful|horrible|disgusting|pathetic|dumb|idiotic))\b/i, // "that's a stupid argument", "that's an absurd idea"
     /\b(?:their|his|her) (?:ridiculous|absurd|stupid|idiotic) (?:ideas?|views?|opinions?)\b/i, // "their ridiculous ideas"
     /\bwill never work\b/i, // Absolute dismissal
     /\bwill always (?:fail|lose|be wrong)\b/i
@@ -633,6 +634,7 @@ function isEscalating(text) {
   const judgingPatterns = [
     // Basic "you are/you're [negative adjective]"
     /\b(you're (?:terrible|awful|horrible|disgusting|pathetic|ridiculous|stupid|dumb|an idiot|a moron|an ass|an asshole))\b/i,
+    /\b(you're being (?:terrible|awful|horrible|disgusting|pathetic|ridiculous|stupid|dumb|idiotic|an idiot|a moron|absurd|childish|unreasonable|unfair|unjust))\b/i, // "you're being ridiculous", "you're being stupid"
     /\b(you are such a (?:dumb (?:ass|asshole)|idiot|moron|jerk|fool|terrible|awful|horrible|disgusting|pathetic|ridiculous|stupid))\b/i, // "you are such a dumb ass", "you are such a idiot", etc.
     /\b(you are (?:so |such )?(?:terrible|awful|horrible|disgusting|pathetic|ridiculous|stupid|dumb(?:ass| ass)?|idiot|moron|ass(?:hole)?|jerk|fool))\b/i, // "you are so stupid", "you are dumb", etc.
     
@@ -665,6 +667,7 @@ function isEscalating(text) {
     
     // Other judging patterns
     /\b(that's (?:terrible|awful|horrible|disgusting|pathetic|ridiculous|stupid|dumb|idiotic))\b/i,
+    /\b(that's (?:a|an) (?:terrible|awful|horrible|disgusting|pathetic|ridiculous|stupid|dumb|idiotic) (?:argument|idea|point|statement|claim|thing|view|opinion))\b/i, // "that's a stupid argument", "that's a ridiculous idea"
     /\b(how (?:dare|could) you)\b/i,
     /\b(you should (?:be ashamed|feel bad|know better))\b/i,
     /\b(?:is|are|was|were) (?:brainwashed|indoctrinated|deluded|insane|crazy)\b/i, // "is brainwashed", "are brainwashed"
