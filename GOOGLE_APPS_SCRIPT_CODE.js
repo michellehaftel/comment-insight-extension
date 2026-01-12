@@ -26,6 +26,7 @@
  * O: platform
  * P: context
  * Q: escalation_type
+ * R: is_escalating
  */
 
 function doPost(e) {
@@ -50,7 +51,8 @@ function doPost(e) {
       data.delta || '',                      // Column N (14) - Delta between actual_posted_text and rephrase_suggestion
       data.platform || '',                   // Column O (15)
       data.context || '',                    // Column P (16)
-      data.escalation_type || ''             // Column Q (17)
+      data.escalation_type || '',            // Column Q (17)
+      data.is_escalating || 'No'             // Column R (18) - Binary flag: "Yes" or "No" for percentage tracking
     ]);
     
     return ContentService
@@ -86,7 +88,8 @@ function testDataOrder() {
     delta: '',                                                    // Should appear in Column N
     platform: 'twitter',                                          // Should appear in Column O
     context: 'https://x.com/test',                                // Should appear in Column P
-    escalation_type: 'emotional'                                  // Should appear in Column Q
+    escalation_type: 'emotional',                                 // Should appear in Column Q
+    is_escalating: 'Yes'                                          // Should appear in Column R
   };
   
   const e = {

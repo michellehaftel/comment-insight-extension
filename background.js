@@ -109,7 +109,8 @@ async function handleDataLogging(data) {
       delta: delta, // NEW: Delta between actual_posted_text and rephrase_suggestion
       platform: data.platform || 'unknown',
       context: data.context || '',
-      escalation_type: data.escalation_type || 'unknown'
+      escalation_type: data.escalation_type || 'unknown',
+      is_escalating: data.is_escalating || (data.escalation_type && data.escalation_type !== 'none' && data.escalation_type !== 'unknown' ? 'Yes' : 'No') // Binary flag for percentage tracking
     };
     
     console.log('📝 Prepared log data:', logData);

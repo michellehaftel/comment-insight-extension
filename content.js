@@ -193,10 +193,21 @@ function setupPostButtonMonitoring() {
         
         // If we have a pending interaction, update it with actual posted text
         if (lastLoggedInteraction) {
+          // Both is_escalating and escalation_type should be based on the user's ORIGINAL text (user_original_text), not the final posted text
+          // This tells us if the user's original intent was escalatory, regardless of what they eventually posted
+          const originalText = lastLoggedInteraction.usersOriginalContent || '';
+          const originalEscalationResult = isEscalating(originalText);
+          const originalEscalationType = originalEscalationResult.isEscalatory ? originalEscalationResult.escalationType : 'none';
+          const isEscalatingBasedOnOriginal = originalEscalationResult.isEscalatory;
+          
           const updatedData = {
             ...lastLoggedInteraction,
+            escalationType: originalEscalationType, // Based on ORIGINAL text, not final text
+            isEscalating: isEscalatingBasedOnOriginal, // Based on ORIGINAL text, not final text
             actualPostedText: finalText || ''
           };
+          
+          console.log(`📊 Original text escalation: ${isEscalatingBasedOnOriginal ? 'ESCALATORY' : 'NOT ESCALATORY'} (${originalEscalationType})`);
           
           // Re-log with actual posted text
           logInteraction(updatedData);
@@ -205,12 +216,22 @@ function setupPostButtonMonitoring() {
           lastLoggedInteraction = null;
           pendingInteractionElement = null;
         } else {
-          // Log standalone post (no escalation detected earlier)
+          // No escalation was detected earlier (no rephrasing happened)
+          // In this case, the original text IS the final text, so use it for both
+          const originalText = finalText || '';
+          const escalationResult = isEscalating(originalText);
+          const escalationType = escalationResult.isEscalatory ? escalationResult.escalationType : 'none';
+          
+          console.log(`📊 Escalation check (no prior interaction): ${escalationResult.isEscalatory ? 'ESCALATORY' : 'NOT ESCALATORY'} (${escalationType})`);
+          
+          // Log standalone post with accurate escalation detection
+          // is_escalating is based on user_original_text (which equals finalText in this case)
           logInteraction({
-            usersOriginalContent: finalText || '',
+            usersOriginalContent: originalText,
             rephraseSuggestion: '',
             didUserAccept: 'not_applicable',
-            escalationType: 'none',
+            escalationType: escalationType,
+            isEscalating: escalationResult.isEscalatory, // Based on original text (same as final in this case)
             actualPostedText: finalText || ''
           });
         }
@@ -234,7 +255,8 @@ async function logInteraction(data) {
         usersOriginalContent: data.usersOriginalContent || '',
         rephraseSuggestion: data.rephraseSuggestion || '',
         didUserAccept: data.didUserAccept || 'no',
-        escalationType: data.escalationType || 'unknown'
+        escalationType: data.escalationType || 'unknown',
+        isEscalating: data.isEscalating !== undefined ? data.isEscalating : (data.escalationType !== 'none' && data.escalationType !== 'unknown')
       };
       
       // Try to find and store the element reference
@@ -252,6 +274,19 @@ async function logInteraction(data) {
       ? postContext.originalPostWriter 
       : 'new';
     
+    // Determine isEscalating binary flag
+    // This should be based on user_original_text (data.usersOriginalContent), not actual_posted_text
+    // If isEscalating is already set, use it; otherwise, check the original text
+    let isEscalatingValue;
+    if (data.isEscalating !== undefined) {
+      isEscalatingValue = data.isEscalating ? 'Yes' : 'No';
+    } else {
+      // Fallback: check the original text to determine escalation
+      const originalText = data.usersOriginalContent || '';
+      const escalationResult = isEscalating(originalText);
+      isEscalatingValue = escalationResult.isEscalatory ? 'Yes' : 'No';
+    }
+    
     const logData = {
       date: new Date().toISOString(),
       original_post_content: originalPostContent,
@@ -261,6 +296,7 @@ async function logInteraction(data) {
       did_user_accept: data.didUserAccept || 'no',
       actual_posted_text: data.actualPostedText || '', // NEW FIELD
       escalation_type: data.escalationType || 'unknown',
+      is_escalating: isEscalatingValue, // Binary flag: "Yes" or "No" for percentage tracking
       platform: detectPlatformName(),
       context: window.location.href,
       post_type: postContext.isReply ? 'reply' : 'new_post'
@@ -2493,7 +2529,8 @@ async function createEscalationTooltip(originalText, element, escalationType = '
         usersOriginalContent: originalText,
         rephraseSuggestion: (rephrasedText && typeof rephrasedText === 'string') ? rephrasedText : '', // May be empty if dismissed during loading or error
         didUserAccept: 'no',
-        escalationType
+        escalationType,
+        isEscalating: escalationType !== 'none' && escalationType !== 'unknown' // Binary flag for percentage tracking
       };
       console.log("💾 Stored interaction data (will log when post button is clicked):", lastLoggedInteraction);
       
@@ -2777,7 +2814,8 @@ async function createEscalationTooltip(originalText, element, escalationType = '
             usersOriginalContent: originalText,
             rephraseSuggestion: rephrasedText,
             didUserAccept: 'yes',
-            escalationType
+            escalationType,
+            isEscalating: escalationType !== 'none' && escalationType !== 'unknown' // Binary flag for percentage tracking
           };
           console.log("💾 Stored interaction data (will log when post button is clicked):", lastLoggedInteraction);
           

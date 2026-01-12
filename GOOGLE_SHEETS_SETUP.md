@@ -9,8 +9,8 @@ This guide will help you set up automatic data logging to Google Sheets for rese
 3. Name it "De-Escalator Research Data"
 4. Set up the following column headers in row 1:
 
-| User ID | Date | Gender | Age | Sector | Country | City | Original Post Content | Original Post Writer | User's Original Content | Rephrase Suggestion | Did User Accept | actual_posted_text | Delta | Platform | Context | Escalation Type |
-|---------|------|--------|-----|--------|---------|------|----------------------|---------------------|------------------------|-------------------|-----------------|-------------------|-------|----------|---------|----------------|
+| User ID | Date | Gender | Age | Sector | Country | City | Original Post Content | Original Post Writer | User's Original Content | Rephrase Suggestion | Did User Accept | actual_posted_text | Delta | Platform | Context | Escalation Type | is_escalating |
+|---------|------|--------|-----|--------|---------|------|----------------------|---------------------|------------------------|-------------------|-----------------|-------------------|-------|----------|---------|----------------|---------------|
 
 ## Step 2: Create Google Apps Script
 
@@ -183,6 +183,7 @@ async function sendToGoogleSheets(data) {
 | 15 | Platform |
 | 16 | Context |
 | 17 | Escalation Type |
+| 18 | **is_escalating** |
 
 **If columns are out of order, data will appear in the wrong places!**
 
@@ -312,6 +313,7 @@ This means your Google Apps Script `appendRow` array has **12 items instead of 1
    - Column O (15): `platform`
    - Column P (16): `context`
    - Column Q (17): `escalation_type`
+   - Column R (18): `is_escalating`
    
    **Make sure your column order matches exactly!**
 
@@ -343,7 +345,8 @@ This means your Google Apps Script `appendRow` array has **12 items instead of 1
       delta: '',                         // Should go to Column N
       platform: 'twitter',              // Should go to Column O
       context: 'https://x.com/test',    // Should go to Column P
-      escalation_type: 'emotional'      // Should go to Column Q
+      escalation_type: 'emotional',     // Should go to Column Q
+      is_escalating: 'Yes'               // Should go to Column R
      };
      
      const e = {
@@ -395,7 +398,8 @@ This means your Google Apps Script `appendRow` array has **12 items instead of 1
 - **Delta**: The difference between actual_posted_text and rephrase_suggestion (shows what text was added/changed by the user after seeing the rephrase)
 - **Platform**: Site where interaction took place (Twitter, Facebook, etc.)
 - **Context**: URL of the page where the interaction happened
-- **Escalation Type**: Whether the text was cognitive, emotional, both, or other
+- **Escalation Type**: Whether the user's **original text** (user_original_text) was cognitive, emotional, both, or other, regardless of what they eventually posted
+- **is_escalating**: Binary flag ("Yes" or "No") indicating if the user's **original text** (user_original_text) is escalatory, regardless of what they eventually posted. This enables easy calculation of the percentage of escalatory texts the user intended to write per user.
 
 ---
 
