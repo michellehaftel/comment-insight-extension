@@ -9,8 +9,8 @@ This guide will help you set up automatic data logging to Google Sheets for rese
 3. Name it "De-Escalator Research Data"
 4. Set up the following column headers in row 1:
 
-| User ID | Date | Gender | Age | Sector | Country | City | Original Post Content | Original Post Writer | User's Original Content | Rephrase Suggestion | Did User Accept | actual_posted_text | Delta | Platform | Context | Escalation Type | is_escalating |
-|---------|------|--------|-----|--------|---------|------|----------------------|---------------------|------------------------|-------------------|-----------------|-------------------|-------|----------|---------|----------------|---------------|
+| User ID | Date | Gender | Age | Sector | Country | City | Original Post Content | Original Post Writer | User's Original Content | Rephrase Suggestion | Did User Accept | actual_posted_text | Delta | Platform | Context | Escalation Type | is_escalating | bot_type |
+|---------|------|--------|-----|--------|---------|------|----------------------|---------------------|------------------------|-------------------|-----------------|-------------------|-------|----------|---------|----------------|---------------|----------|
 
 ## Step 2: Create Google Apps Script
 
@@ -184,6 +184,7 @@ async function sendToGoogleSheets(data) {
 | 16 | Context |
 | 17 | Escalation Type |
 | 18 | **is_escalating** |
+| 19 | **bot_type** |
 
 **If columns are out of order, data will appear in the wrong places!**
 
@@ -314,6 +315,7 @@ This means your Google Apps Script `appendRow` array has **12 items instead of 1
    - Column P (16): `context`
    - Column Q (17): `escalation_type`
    - Column R (18): `is_escalating`
+   - Column S (19): `bot_type` (A/B testing: "angel" = de-escalation bot, "devil" = escalation bot)
    
    **Make sure your column order matches exactly!**
 
@@ -346,7 +348,8 @@ This means your Google Apps Script `appendRow` array has **12 items instead of 1
       platform: 'twitter',              // Should go to Column O
       context: 'https://x.com/test',    // Should go to Column P
       escalation_type: 'emotional',     // Should go to Column Q
-      is_escalating: 'Yes'               // Should go to Column R
+      is_escalating: 'Yes',              // Should go to Column R
+      bot_type: 'angel'                  // Should go to Column S
      };
      
      const e = {
@@ -400,6 +403,7 @@ This means your Google Apps Script `appendRow` array has **12 items instead of 1
 - **Context**: URL of the page where the interaction happened
 - **Escalation Type**: Whether the user's **original text** (user_original_text) was cognitive, emotional, both, or other, regardless of what they eventually posted
 - **is_escalating**: Binary flag ("Yes" or "No") indicating if the user's **original text** (user_original_text) is escalatory, regardless of what they eventually posted. This enables easy calculation of the percentage of escalatory texts the user intended to write per user.
+- **bot_type**: A/B testing field indicating which bot was used: "angel" (de-escalation bot - suggests making toxic content calm) or "devil" (escalation bot - suggests making calm content more direct/impactful). Used to compare conversion rates between the two approaches.
 
 ---
 

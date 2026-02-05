@@ -27,6 +27,7 @@
  * P: context
  * Q: escalation_type
  * R: is_escalating
+ * S: bot_type
  */
 
 function doPost(e) {
@@ -52,7 +53,8 @@ function doPost(e) {
       data.platform || '',                   // Column O (15)
       data.context || '',                    // Column P (16)
       data.escalation_type || '',            // Column Q (17)
-      data.is_escalating || 'No'             // Column R (18) - Binary flag: "Yes" or "No" for percentage tracking
+      data.is_escalating || 'No',           // Column R (18) - Binary flag: "Yes" or "No" for percentage tracking
+      data.bot_type || 'angel'               // Column S (19) - Bot type: "angel" (de-escalation) or "devil" (escalation) for A/B testing
     ]);
     
     return ContentService
@@ -89,7 +91,8 @@ function testDataOrder() {
     platform: 'twitter',                                          // Should appear in Column O
     context: 'https://x.com/test',                                // Should appear in Column P
     escalation_type: 'emotional',                                 // Should appear in Column Q
-    is_escalating: 'Yes'                                          // Should appear in Column R
+    is_escalating: 'Yes',                                         // Should appear in Column R
+    bot_type: 'angel'                                             // Should appear in Column S
   };
   
   const e = {

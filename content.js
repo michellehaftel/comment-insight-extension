@@ -137,6 +137,50 @@ function detectPlatformName() {
   return host || 'unknown';
 }
 
+/**
+ * Get or assign bot type for A/B testing (angel vs devil bot)
+ * Uses consistent hash-based assignment based on userId for persistent assignment
+ * Returns 'angel' (de-escalation bot) or 'devil' (escalation bot)
+ */
+async function getBotAssignment() {
+  try {
+    const result = await chrome.storage.local.get(['userId', 'botType']);
+    const { userId, botType } = result;
+    
+    // If already assigned, return it
+    if (botType === 'angel' || botType === 'devil') {
+      console.log(`🤖 Bot assignment: ${botType} (from storage)`);
+      return botType;
+    }
+    
+    // Generate consistent assignment based on userId hash
+    if (userId) {
+      // Simple hash function for consistent assignment
+      const hash = userId.split('').reduce((acc, char) => {
+        return ((acc << 5) - acc) + char.charCodeAt(0);
+      }, 0);
+      
+      // 50/50 split
+      const assignedBot = Math.abs(hash) % 2 === 0 ? 'angel' : 'devil';
+      
+      // Store assignment
+      await chrome.storage.local.set({ botType: assignedBot });
+      console.log(`🤖 Bot assignment: ${assignedBot} (new assignment based on userId)`);
+      return assignedBot;
+    }
+    
+    // Fallback: random assignment if no userId yet (shouldn't happen after onboarding)
+    const randomBot = Math.random() < 0.5 ? 'angel' : 'devil';
+    await chrome.storage.local.set({ botType: randomBot });
+    console.log(`🤖 Bot assignment: ${randomBot} (random fallback - no userId yet)`);
+    return randomBot;
+  } catch (error) {
+    console.error('❌ Error getting bot assignment:', error);
+    // Default to angel bot on error
+    return 'angel';
+  }
+}
+
 // Store the most recent interaction so we can log it with actual posted text when post button is clicked
 // NOTE: If user triggers multiple escalations in one session (dismiss/accept multiple times),
 // only the most recent interaction is stored and logged. This is intentional - there's only
@@ -224,6 +268,9 @@ function setupPostButtonMonitoring() {
           
           console.log(`📊 Escalation check (no prior interaction): ${escalationResult.isEscalatory ? 'ESCALATORY' : 'NOT ESCALATORY'} (${escalationType})`);
           
+          // Get bot type for logging
+          const botType = await getBotAssignment();
+          
           // Log standalone post with accurate escalation detection
           // is_escalating is based on user_original_text (which equals finalText in this case)
           logInteraction({
@@ -232,7 +279,8 @@ function setupPostButtonMonitoring() {
             didUserAccept: 'not_applicable',
             escalationType: escalationType,
             isEscalating: escalationResult.isEscalatory, // Based on original text (same as final in this case)
-            actualPostedText: finalText || ''
+            actualPostedText: finalText || '',
+            botType: botType // Include bot type for A/B testing
           });
         }
       }
@@ -248,6 +296,12 @@ function setupPostButtonMonitoring() {
 async function logInteraction(data) {
   try {
     const postContext = getPostContext();
+    
+    // Get bot type for A/B testing tracking (if not already in data)
+    let botType = data.botType;
+    if (!botType) {
+      botType = await getBotAssignment();
+    }
     
     // Store for potential update when post button is clicked (only if not already containing actualPostedText)
     if (!data.actualPostedText) {
@@ -297,6 +351,7 @@ async function logInteraction(data) {
       actual_posted_text: data.actualPostedText || '', // NEW FIELD
       escalation_type: data.escalationType || 'unknown',
       is_escalating: isEscalatingValue, // Binary flag: "Yes" or "No" for percentage tracking
+      bot_type: botType || 'angel', // Track which bot was used for A/B testing
       platform: detectPlatformName(),
       context: window.location.href,
       post_type: postContext.isReply ? 'reply' : 'new_post'
@@ -998,7 +1053,7 @@ let currentElementBeingChecked = null;
 let justRephrased = false;
 let rephraseTimeout = null;
 
-function checkForEscalation(element) {
+async function checkForEscalation(element) {
   const text = getTextContent(element);
   
   console.log("🔍 checkForEscalation called - text length:", text?.length || 0);
@@ -1017,9 +1072,13 @@ function checkForEscalation(element) {
   // Store reference for rephrasing
   currentElementBeingChecked = element;
   
+  // Get bot assignment for A/B testing
+  const botType = await getBotAssignment();
+  
   // ALWAYS log what we're checking for debugging
   console.log("🔍 Checking text:", text.substring(0, 100) + (text.length > 100 ? '...' : ''));
   console.log("📏 Text length:", text.length);
+  console.log(`🤖 Bot type: ${botType}`);
   
   const escalationResult = isEscalating(text);
   
@@ -1029,17 +1088,34 @@ function checkForEscalation(element) {
     reasons: escalationResult.reasons
   });
   
-  if (escalationResult.isEscalatory) {
-    console.log("🚨 Escalation detected - showing warning tooltip");
-    console.log("📝 Requires API:", escalationResult.requiresAPI || false);
-    createEscalationTooltip(text, element, escalationResult.escalationType);
-  } else {
-    console.log("✅ No escalation detected");
-    const existingTooltip = document.querySelector(".escalation-tooltip");
-    if (existingTooltip) {
-      existingTooltip.remove();
+  // Different logic for angel vs devil bot
+  if (botType === 'angel') {
+    // Angel bot: Show tooltip when content IS escalatory (current behavior)
+    if (escalationResult.isEscalatory) {
+      console.log("🚨 Escalation detected - showing de-escalation tooltip (angel bot)");
+      console.log("📝 Requires API:", escalationResult.requiresAPI || false);
+      createEscalationTooltip(text, element, escalationResult.escalationType, 'angel');
+    } else {
+      console.log("✅ No escalation detected - no tooltip needed (angel bot)");
+      const existingTooltip = document.querySelector(".escalation-tooltip");
+      if (existingTooltip) {
+        existingTooltip.remove();
+      }
+      justRephrased = false;
     }
-    justRephrased = false;
+  } else if (botType === 'devil') {
+    // Devil bot: Show tooltip when content is NOT escalatory (opposite behavior)
+    if (!escalationResult.isEscalatory) {
+      console.log("😈 Calm content detected - showing escalation tooltip (devil bot)");
+      createEscalationTooltip(text, element, 'none', 'devil');
+    } else {
+      console.log("✅ Content already escalatory - no tooltip needed (devil bot)");
+      const existingTooltip = document.querySelector(".escalation-tooltip");
+      if (existingTooltip) {
+        existingTooltip.remove();
+      }
+      justRephrased = false;
+    }
   }
 }
 
@@ -1047,7 +1123,7 @@ function checkForEscalation(element) {
  * Call proxy server to rephrase text using ECPM prompt
  * API key is handled server-side by the proxy
  */
-async function rephraseViaAPI(text, context = null) {
+async function rephraseViaAPI(text, context = null, botType = 'angel') {
   try {
     // Check if API is enabled and config is available
     if (typeof USE_API === 'undefined' || !USE_API) {
@@ -1055,8 +1131,8 @@ async function rephraseViaAPI(text, context = null) {
       return null;
     }
     
-    if (typeof API_CONFIG === 'undefined' || typeof ECPM_PROMPT === 'undefined') {
-      console.error('❌ API_CONFIG or ECPM_PROMPT not found in config.js');
+    if (typeof API_CONFIG === 'undefined') {
+      console.error('❌ API_CONFIG not found in config.js');
       return null;
     }
     
@@ -1072,6 +1148,8 @@ async function rephraseViaAPI(text, context = null) {
     }
     
     // Prepare request to proxy server
+    // Note: Prompt is now optional - proxy server will use ECPM_PROMPT environment variable first,
+    // then fall back to request body prompt, then default. This allows prompt updates without Chrome Web Store approval.
     const requestBody = {
       text: text,
       context: {
@@ -1083,8 +1161,19 @@ async function rephraseViaAPI(text, context = null) {
       temperature: API_CONFIG.temperature || 1.0,
       max_tokens: API_CONFIG.max_tokens || 2048,
       top_p: API_CONFIG.top_p || 1.0,
-      prompt: ECPM_PROMPT // Send the full prompt template (proxy will replace {TEXT} and {CONTEXT})
+      bot_type: botType || 'angel' // NEW: Specify which bot (angel = de-escalation, devil = escalation)
+      // Prompt is now optional - only send if available (as fallback)
+      // Proxy server prioritizes: 1) ECPM_PROMPT env var, 2) req.body.prompt, 3) default
     };
+    
+    // Only include prompt in request if it's available (as fallback)
+    // This allows the proxy server to use the environment variable instead
+    if (typeof ECPM_PROMPT !== 'undefined' && ECPM_PROMPT) {
+      requestBody.prompt = ECPM_PROMPT;
+      console.log('📝 Sending prompt from extension (fallback - proxy will use env var if available)');
+    } else {
+      console.log('📝 No prompt in extension - proxy server will use environment variable or default');
+    }
     
     console.log('🤖 Calling proxy server for rephrasing...');
     console.log('📡 Proxy URL:', PROXY_SERVER_URL);
@@ -1468,15 +1557,15 @@ async function rephraseViaAPI(text, context = null) {
 }
 
 /**
- * Rephrase text using ECPM de-escalation strategies via Gemini API.
+ * Rephrase text using ECPM strategies via Gemini API (de-escalation or escalation based on bot type).
  * No fallback - if API fails or is disabled, returns null to show error message.
  */
-async function rephraseForDeEscalation(text) {
+async function rephraseForDeEscalation(text, botType = 'angel') {
   // Only use API - no fallback to pattern matching
   if (typeof USE_API !== 'undefined' && USE_API) {
     // Get context about the post/comment being replied to
     const context = getPostContext();
-    const apiResult = await rephraseViaAPI(text, context);
+    const apiResult = await rephraseViaAPI(text, context, botType);
     return apiResult; // Return null if API fails, don't fallback
   }
   
@@ -2251,7 +2340,7 @@ function showSuccessTooltip(element) {
   }, 2500);
 }
 
-async function createEscalationTooltip(originalText, element, escalationType = 'unknown') {
+async function createEscalationTooltip(originalText, element, escalationType = 'unknown', botType = 'angel') {
   // Remove if already shown
   const existing = document.querySelector(".escalation-tooltip");
   if (existing) existing.remove();
@@ -2260,8 +2349,14 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   // Detect if text is in Hebrew for UI localization
   const isHebrew = false; // DISABLED: containsHebrew(originalText);
   
-  // DISABLED: Hebrew UI text - always use English
-  const uiText = {
+  // Different UI text based on bot type
+  const uiText = botType === 'devil' ? {
+    warning: "This comment could be more direct and impactful.",
+    suggestLabel: "Consider making it more impactful:",
+    dismiss: "Dismiss",
+    rephrase: "Make it more direct",
+    generating: "⏳ Generating suggestion..."
+  } : {
     warning: "This comment/post has a high chance of escalating the conversation.",
     suggestLabel: "Consider rephrasing:",
     dismiss: "Dismiss",
@@ -2530,7 +2625,8 @@ async function createEscalationTooltip(originalText, element, escalationType = '
         rephraseSuggestion: (rephrasedText && typeof rephrasedText === 'string') ? rephrasedText : '', // May be empty if dismissed during loading or error
         didUserAccept: 'no',
         escalationType,
-        isEscalating: escalationType !== 'none' && escalationType !== 'unknown' // Binary flag for percentage tracking
+        isEscalating: escalationType !== 'none' && escalationType !== 'unknown', // Binary flag for percentage tracking
+        botType: botType || 'angel' // Track which bot was used for A/B testing
       };
       console.log("💾 Stored interaction data (will log when post button is clicked):", lastLoggedInteraction);
       
@@ -2545,13 +2641,13 @@ async function createEscalationTooltip(originalText, element, escalationType = '
 
   // Generate rephrased version (async - uses Gemini API only, no fallback)
   try {
-    rephrasedText = await rephraseForDeEscalation(originalText);
-    // rephrasedText can be null (already de-escalatory) or a string (rephrased text)
+    rephrasedText = await rephraseForDeEscalation(originalText, botType);
+    // rephrasedText can be null (already de-escalatory/escalatory) or a string (rephrased text)
     // undefined means an error occurred
   } catch (error) {
     console.error('❌ Error during rephrasing:', error);
     rephrasingError = true;
-    rephrasedText = undefined; // Keep as undefined to distinguish from null (already de-escalatory)
+    rephrasedText = undefined; // Keep as undefined to distinguish from null (already de-escalatory/escalatory)
   }
   
   // Update tooltip with the rephrased text
@@ -2815,7 +2911,8 @@ async function createEscalationTooltip(originalText, element, escalationType = '
             rephraseSuggestion: rephrasedText,
             didUserAccept: 'yes',
             escalationType,
-            isEscalating: escalationType !== 'none' && escalationType !== 'unknown' // Binary flag for percentage tracking
+            isEscalating: escalationType !== 'none' && escalationType !== 'unknown', // Binary flag for percentage tracking
+            botType: botType || 'angel' // Track which bot was used for A/B testing
           };
           console.log("💾 Stored interaction data (will log when post button is clicked):", lastLoggedInteraction);
           

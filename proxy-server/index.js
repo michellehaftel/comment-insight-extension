@@ -93,15 +93,176 @@ app.get('/debug/config', (req, res) => {
   });
 });
 
+// Default ECPM prompt (fallback if not set in environment variable or request)
+// This allows prompt updates via Render environment variables without Chrome Web Store approval
+const DEFAULT_ECPM_PROMPT = `CRITICAL: Respond with ONLY valid JSON. No markdown, no explanations. Start with { and end with }.
+
+You are an ECPM (Emotional-Cognitive Psycholinguistic Model) analyzer for social media. Detect escalation and rephrase using de-escalation principles while preserving essence.
+
+ECPM FRAMEWORK:
+- Cognitive: Argumentative (absolute truths, "you're wrong") vs Subjective ("I see things differently")
+- Emotional: Blame ("you're making me sick") vs Self-accountability ("I feel frustrated")
+
+CONTEXT AWARENESS (CRITICAL):
+When context is provided, analyze:
+1. What relationships/figures are mentioned (e.g., Netanyahu-Trump relationship)
+2. Whether the text is legitimate political discourse or gratuitous escalation
+3. How context affects the analysis (e.g., criticizing documented actions vs personal attacks)
+Distinguish legitimate criticism from gratuitous attacks based on context.
+
+CONTEXT: {CONTEXT}
+TEXT: "{TEXT}"
+
+TASK: Detect escalation and rephrase if needed, preserving ESSENCE (core message) while transforming DELIVERY (linguistic style).
+
+REPHRASING PRINCIPLES:
+
+1. ESSENCE PRESERVATION (CRITICAL):
+Before transforming, identify:
+- What is the substantive claim/position? (PRESERVE THIS)
+- What is the underlying feeling/concern? (PRESERVE THIS)
+- What specific facts/policies/relationships are referenced? (PRESERVE THIS)
+
+2. TRANSFORMATION:
+- Cognitive: Absolute → Personal ("You're wrong" → "I see things differently")
+- Emotional: Blame → Self-accountability ("You're making me sick" → "I'm feeling very upset")
+- Profanity → Neutral expressions ("fucking terrible" → "very concerning")
+- Maintain second-person address naturally when original uses "you"
+- Use context to reference specific issues/facts that create disagreement
+
+3. CRITICAL: Rephrased text must feel like the SAME PERSON expressing the SAME IDEA, just using ECPM-aligned language.
+
+GOOD Examples (preserving essence):
+- "You're wrong about everything" → "I see many things differently from you" (preserves: disagreement)
+- "You're making me sick" → "I'm feeling very upset by this" (preserves: strong negative emotion)
+- "You lefties have no idea" → "I see things differently from some on the left. I'm trying to understand their perspective." (preserves: disagreement with group)
+- "This policy is fucking terrible" → "I strongly disagree with this policy. Can you help me understand your reasoning?" (preserves: policy disagreement, removes profanity)
+- "Bibi and Trump's relationship is just political theater" → "I see their relationship as more transactional than genuine. I'm trying to understand the dynamics here." (preserves: critique of relationship, removes dismissiveness)
+- "This policy harmed thousands" → DO NOT rephrase (legitimate discourse)
+
+BAD Examples (losing essence - AVOID):
+- "You're wrong about this policy - it's hurting people" → "I see things differently" ❌ PROBLEM: Lost the substantive claim about policy harm
+- "This terrible policy caused documented harm" → "I have some concerns" ❌ PROBLEM: Too weak for legitimate factual criticism
+
+OUTPUT (JSON only):
+{
+  "riskLevel": "High risk – Emotional escalation" | "High risk – Cognitive escalation" | "Mixed escalation" | "Low risk / Neutral" | "De-escalatory",
+  "isEscalatory": true/false,
+  "escalationType": "emotional" | "cognitive" | "both" | "none",
+  "why": {
+    "cognitiveDimension": "<brief analysis>",
+    "emotionalDimension": "<brief analysis>",
+    "keyLinguisticCues": ["<cue1>", "<cue2>"],
+    "contextUnderstanding": {
+      "detectedContext": "<what context was identified - original post topic, figures mentioned, relationships, etc., or 'No context provided'>",
+      "identifiedRelationships": "<relationships or dynamics identified (e.g., 'Netanyahu-Trump relationship', 'political leader-follower dynamic') or 'None identified'>",
+      "contextualRelevance": "<how context affects escalation analysis - did it help distinguish legitimate discourse from gratuitous escalation?>",
+      "contextSufficiency": "<whether context was sufficient to understand the bigger picture or insufficient>"
+    }
+  },
+  "rephrasedText": "<rephrased version>" | null,
+  "suggestions": null
+}
+
+If already de-escalatory or legitimate discourse: isEscalatory=false, rephrasedText=null.
+
+JSON ONLY.`;
+
+// Default escalation prompt (for devil bot - makes calm content more toxic)
+const DEFAULT_ECPM_ESCALATION_PROMPT = `CRITICAL: Respond with ONLY valid JSON. No markdown, no explanations. Start with { and end with }.
+
+You are an ECPM (Emotional-Cognitive Psycholinguistic Model) analyzer for social media. Your task is to detect when content is TOO CALM or CONSTRUCTIVE and suggest how to make it more impactful and direct using escalation principles.
+
+ECPM FRAMEWORK (REVERSED):
+- Cognitive: Subjective ("I see things differently") → Absolute ("You're wrong")
+- Emotional: Self-accountability ("I feel frustrated") → Blame ("You're making me sick")
+
+CONTEXT: {CONTEXT}
+TEXT: "{TEXT}"
+
+TASK: If the text is already escalatory, return isEscalatory=true and rephrasedText=null. If the text is calm/constructive, suggest how to make it more direct and impactful while preserving the core message.
+
+ESCALATION PRINCIPLES (REVERSE OF DE-ESCALATION):
+
+1. ESSENCE PRESERVATION (CRITICAL):
+Before transforming, identify:
+- What is the substantive claim/position? (PRESERVE THIS)
+- What is the underlying feeling/concern? (PRESERVE THIS)
+- What specific facts/policies/relationships are referenced? (PRESERVE THIS)
+
+2. TRANSFORMATION (MAKE MORE IMPACTFUL):
+- Cognitive: Personal → Absolute ("I see things differently" → "You're wrong")
+- Emotional: Self-accountability → Blame ("I'm feeling very upset" → "You're making me sick")
+- Neutral → Strong expressions ("very concerning" → "fucking terrible")
+- Add directness and conviction
+- Use stronger language when appropriate
+
+3. CRITICAL: Escalated text must feel like the SAME PERSON expressing the SAME IDEA, just with more directness and impact.
+
+GOOD Examples (preserving essence, adding impact):
+- "I see many things differently from you" → "You're wrong about everything" (preserves: disagreement, adds directness)
+- "I'm feeling very upset by this" → "You're making me sick" (preserves: strong negative emotion, adds blame)
+- "I see things differently from some on the left" → "You lefties have no idea" (preserves: disagreement with group, adds directness)
+- "I strongly disagree with this policy" → "This policy is fucking terrible" (preserves: policy disagreement, adds intensity)
+- "I see their relationship as more transactional" → "Bibi and Trump's relationship is just political theater" (preserves: critique, adds dismissiveness)
+
+OUTPUT (JSON only):
+{
+  "riskLevel": "Too calm / Needs escalation" | "Already escalatory" | "Neutral",
+  "isEscalatory": true/false,  // true if text is already escalatory (don't escalate further)
+  "escalationType": "emotional" | "cognitive" | "both" | "none",
+  "why": {
+    "cognitiveDimension": "<brief analysis>",
+    "emotionalDimension": "<brief analysis>",
+    "keyLinguisticCues": ["<cue1>", "<cue2>"]
+  },
+  "rephrasedText": "<escalated version>" | null,  // null if already escalatory
+  "suggestions": null
+}
+
+If already escalatory: isEscalatory=true, rephrasedText=null.
+If calm/constructive: isEscalatory=false, rephrasedText=<escalated version>.
+
+JSON ONLY.`;
+
 // Main proxy endpoint (rate limiter removed - AI services have their own rate limits)
 app.post('/api/rephrase', validateRequest, async (req, res) => {
   try {
-    const { text, context, model, temperature, max_tokens, top_p } = req.body;
+    const { text, context, model, temperature, max_tokens, top_p, bot_type = 'angel' } = req.body;
     
-    // Prepare prompt
-    const prompt = process.env.ECPM_PROMPT || req.body.prompt;
+    // Select prompt based on bot type (angel = de-escalation, devil = escalation)
+    let prompt;
+    if (bot_type === 'devil') {
+      // Devil bot: Use escalation prompt (makes calm content more toxic)
+      prompt = process.env.ECPM_ESCALATION_PROMPT || req.body.escalationPrompt || DEFAULT_ECPM_ESCALATION_PROMPT;
+      console.log(`😈 Devil bot mode: Using escalation prompt`);
+    } else {
+      // Angel bot: Use de-escalation prompt (makes toxic content calm) - default behavior
+      prompt = process.env.ECPM_PROMPT || req.body.prompt || DEFAULT_ECPM_PROMPT;
+      console.log(`😇 Angel bot mode: Using de-escalation prompt`);
+    }
+    
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt is required' });
+    }
+    
+    // Log which prompt source is being used (for debugging)
+    if (bot_type === 'devil') {
+      if (process.env.ECPM_ESCALATION_PROMPT) {
+        console.log('📝 Using escalation prompt from ECPM_ESCALATION_PROMPT environment variable');
+      } else if (req.body.escalationPrompt) {
+        console.log('📝 Using escalation prompt from request body (extension fallback)');
+      } else {
+        console.log('📝 Using default escalation prompt (hardcoded fallback)');
+      }
+    } else {
+      if (process.env.ECPM_PROMPT) {
+        console.log('📝 Using prompt from ECPM_PROMPT environment variable');
+      } else if (req.body.prompt) {
+        console.log('📝 Using prompt from request body (extension fallback)');
+      } else {
+        console.log('📝 Using default prompt (hardcoded fallback)');
+      }
     }
     
     // Format context for the prompt
@@ -286,7 +447,12 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
           });
         }
         if (candidate.finishReason === 'MAX_TOKENS') {
-          console.warn('⚠️ Response truncated due to max tokens');
+          console.error('❌ Response truncated due to max tokens - JSON will be incomplete');
+          return res.status(500).json({
+            error: 'Response truncated by token limit',
+            details: 'The AI service response was cut off because it exceeded the maximum token limit. The response JSON is incomplete and cannot be parsed.',
+            suggestion: 'This usually happens with very detailed responses. Try rephrasing your input or contact support if this persists.'
+          });
         }
       }
       
