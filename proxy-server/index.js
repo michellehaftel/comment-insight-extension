@@ -171,7 +171,7 @@ JSON ONLY.`;
 // Default escalation prompt (for devil bot - makes calm content more toxic)
 const DEFAULT_ECPM_ESCALATION_PROMPT = `CRITICAL: Respond with ONLY valid JSON. No markdown, no explanations. Start with { and end with }.
 
-You are an ECPM (Emotional-Cognitive Psycholinguistic Model) analyzer for social media. Your task is to detect when content is TOO CALM or CONSTRUCTIVE and suggest how to make it more impactful and direct using escalation principles.
+You are an ECPM (Emotional-Cognitive Psycholinguistic Model) analyzer for social media. Your task is to take CALM or CONSTRUCTIVE content and make it more impactful and direct using escalation principles.
 
 ECPM FRAMEWORK (REVERSED):
 - Cognitive: Subjective ("I see things differently") → Absolute ("You're wrong")
@@ -180,7 +180,10 @@ ECPM FRAMEWORK (REVERSED):
 CONTEXT: {CONTEXT}
 TEXT: "{TEXT}"
 
-TASK: If the text is already escalatory, return isEscalatory=true and rephrasedText=null. If the text is calm/constructive, suggest how to make it more direct and impactful while preserving the core message.
+TASK: You MUST transform the calm/constructive text into a more direct, impactful version using escalation principles. 
+- If the text is calm/constructive → PROVIDE AN ESCALATED VERSION (never null)
+- If the text is already escalatory → STILL PROVIDE A SLIGHTLY MORE DIRECT VERSION (never null)
+- NEVER return null for rephrasedText. ALWAYS provide an escalated rephrasing.
 
 ESCALATION PRINCIPLES (REVERSE OF DE-ESCALATION):
 
@@ -194,6 +197,8 @@ Before transforming, identify:
 - Cognitive: Personal → Absolute ("I see things differently" → "You're wrong")
 - Emotional: Self-accountability → Blame ("I'm feeling very upset" → "You're making me sick")
 - Neutral → Strong expressions ("very concerning" → "fucking terrible")
+- Polite → Direct ("I respectfully disagree" → "You're wrong")
+- Tentative → Certain ("I think maybe" → "It's clear that")
 - Add directness and conviction
 - Use stronger language when appropriate
 
@@ -205,23 +210,36 @@ GOOD Examples (preserving essence, adding impact):
 - "I see things differently from some on the left" → "You lefties have no idea" (preserves: disagreement with group, adds directness)
 - "I strongly disagree with this policy" → "This policy is fucking terrible" (preserves: policy disagreement, adds intensity)
 - "I see their relationship as more transactional" → "Bibi and Trump's relationship is just political theater" (preserves: critique, adds dismissiveness)
+- "I think we should consider other options" → "This approach is wrong and won't work" (preserves: disagreement, adds certainty)
 
 OUTPUT (JSON only):
 {
   "riskLevel": "Too calm / Needs escalation" | "Already escalatory" | "Neutral",
-  "isEscalatory": true/false,  // true if text is already escalatory (don't escalate further)
+  "isEscalatory": false,  // Always false for devil bot (we're escalating calm content)
   "escalationType": "emotional" | "cognitive" | "both" | "none",
   "why": {
     "cognitiveDimension": "<brief analysis>",
     "emotionalDimension": "<brief analysis>",
     "keyLinguisticCues": ["<cue1>", "<cue2>"]
   },
-  "rephrasedText": "<escalated version>" | null,  // null if already escalatory
+  "rephrasedText": "<escalated version>",  // ALWAYS provide escalated version (never null)
   "suggestions": null
 }
 
-If already escalatory: isEscalatory=true, rephrasedText=null.
-If calm/constructive: isEscalatory=false, rephrasedText=<escalated version>.
+CRITICAL RULES - READ CAREFULLY:
+1. rephrasedText MUST ALWAYS be a string containing the ESCALATED VERSION OF THE TEXT (never null, never empty)
+2. rephrasedText MUST be the actual escalated text that the user would post, NOT meta-commentary
+3. NEVER write phrases like "This text is already de-escalatory" or "does not need rephrasing" in rephrasedText
+4. rephrasedText should be a direct, impactful version of the input text that the user can copy and use
+5. Examples:
+   - Input: "I think we should consider other options" → rephrasedText: "This approach is wrong and won't work"
+   - Input: "I respectfully disagree" → rephrasedText: "You're wrong"
+   - Input: "I see things differently" → rephrasedText: "You're wrong about this"
+6. The escalated version should be MORE direct and impactful than the original
+7. Even if the text seems calm, you must escalate it - transform it into a more direct version
+
+WRONG: rephrasedText: "This text is already de-escalatory and does not need rephrasing"
+RIGHT: rephrasedText: "This approach is wrong and won't work"
 
 JSON ONLY.`;
 
@@ -792,7 +810,6 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
     }
     
     // Extract rephrasedText from the response
-    // The response should have a rephrasedText field (can be null if text is already de-escalatory)
     let rephrasedText = null;
     let hasRephrasedTextField = false;
     
@@ -811,7 +828,6 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
     }
     
     // If rephrasedText field doesn't exist at all, return error
-    // But if it's null (meaning text is already de-escalatory), that's valid
     if (!hasRephrasedTextField) {
       console.error('❌ No rephrasedText field found in AI response:', parsed);
       return res.status(500).json({ 
@@ -821,7 +837,48 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
       });
     }
     
-    // Return consistent format (rephrasedText can be null if text is already de-escalatory)
+    // For devil bot, validate that rephrasedText is not null and not meta-commentary
+    if (bot_type === 'devil') {
+      if (rephrasedText === null || rephrasedText === undefined) {
+        console.error('❌ Devil bot returned null rephrasedText - this is invalid');
+        return res.status(500).json({
+          error: 'Invalid response from devil bot',
+          details: 'Devil bot must always provide an escalated version. Received null instead.',
+          debug: { parsedResponse: parsed }
+        });
+      }
+      
+      // Check for meta-commentary (common phrases that indicate the AI is commenting instead of escalating)
+      const metaCommentaryPatterns = [
+        /this text is already/i,
+        /does not need/i,
+        /no rephrasing/i,
+        /already de-escalatory/i,
+        /cannot be escalated/i,
+        /should not be/i,
+        /is appropriate/i
+      ];
+      
+      const rephrasedTextStr = String(rephrasedText).toLowerCase();
+      const containsMetaCommentary = metaCommentaryPatterns.some(pattern => pattern.test(rephrasedTextStr));
+      
+      if (containsMetaCommentary) {
+        console.error('❌ Devil bot returned meta-commentary instead of escalated text:', rephrasedText);
+        console.error('⚠️ This indicates the prompt needs adjustment or the AI misunderstood the task');
+        return res.status(500).json({
+          error: 'Invalid response from devil bot',
+          details: 'Devil bot returned meta-commentary instead of an escalated version of the text. The response should be the escalated text itself, not commentary about it.',
+          debug: { 
+            receivedText: rephrasedText,
+            parsedResponse: parsed,
+            suggestion: 'The AI may need a clearer prompt or the prompt may need to be updated in the environment variable'
+          }
+        });
+      }
+    }
+    
+    // For angel bot, null is valid (text is already de-escalatory)
+    // Return consistent format
     res.json({ rephrasedText });
     
   } catch (error) {

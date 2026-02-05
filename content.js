@@ -205,7 +205,7 @@ function setupPostButtonMonitoring() {
   ];
   
   // Monitor clicks on post buttons (use capture phase to catch event early)
-  document.addEventListener('click', (e) => {
+  document.addEventListener('click', async (e) => {
     // Check if clicked element or parent is a post button
     let target = e.target;
     let isPostButton = false;
@@ -531,6 +531,44 @@ function containsHebrew(text) {
 function containsNonLatin(text) {
   // Check for non-ASCII letters (excluding basic punctuation)
   return /[^\x00-\x7F]/.test(text) && /[\u0590-\u05FF\u0600-\u06FF\u4E00-\u9FFF\u3400-\u4DBF]/.test(text);
+}
+
+/**
+ * Check if text has enough constructive essence to warrant escalation suggestion (devil bot)
+ * Filters out very short text, greetings, and content without substantive meaning
+ */
+function hasConstructiveEssence(text) {
+  const trimmedText = text.trim();
+  
+  // Minimum length threshold - need at least 20 characters for substantive content
+  if (trimmedText.length < 20) {
+    return false;
+  }
+  
+  // Filter out common greetings and short phrases
+  const greetingPatterns = [
+    /^(hi|hello|hey|greetings|good morning|good afternoon|good evening|thanks|thank you|thx|ty)[\s!.,]*$/i,
+    /^(ok|okay|sure|yes|no|maybe|perhaps|probably)[\s!.,]*$/i,
+    /^(lol|haha|hehe|lmao|rofl)[\s!.,]*$/i
+  ];
+  
+  if (greetingPatterns.some(pattern => pattern.test(trimmedText))) {
+    return false;
+  }
+  
+  // Need at least 3 words for substantive content
+  const wordCount = trimmedText.split(/\s+/).filter(word => word.length > 0).length;
+  if (wordCount < 3) {
+    return false;
+  }
+  
+  // Check if text has actual content (not just repeated characters or single words)
+  const uniqueWords = new Set(trimmedText.toLowerCase().split(/\s+/).filter(w => w.length > 2));
+  if (uniqueWords.size < 2) {
+    return false;
+  }
+  
+  return true;
 }
 
 function isEscalating(text) {
@@ -1104,12 +1142,19 @@ async function checkForEscalation(element) {
       justRephrased = false;
     }
   } else if (botType === 'devil') {
-    // Devil bot: Show tooltip when content is NOT escalatory (opposite behavior)
-    if (!escalationResult.isEscalatory) {
-      console.log("😈 Calm content detected - showing escalation tooltip (devil bot)");
+    // Devil bot: Show tooltip when content is NOT escalatory AND has enough substance
+    // Only trigger on text that has constructive essence (not just greetings or very short text)
+    const hasSubstance = hasConstructiveEssence(text);
+    
+    if (!escalationResult.isEscalatory && hasSubstance) {
+      console.log("😈 Calm content with substance detected - showing escalation tooltip (devil bot)");
       createEscalationTooltip(text, element, 'none', 'devil');
     } else {
-      console.log("✅ Content already escalatory - no tooltip needed (devil bot)");
+      if (!hasSubstance) {
+        console.log("⚠️ Text too short or lacks substance - no tooltip needed (devil bot)");
+      } else {
+        console.log("✅ Content already escalatory - no tooltip needed (devil bot)");
+      }
       const existingTooltip = document.querySelector(".escalation-tooltip");
       if (existingTooltip) {
         existingTooltip.remove();
@@ -1386,10 +1431,18 @@ async function rephraseViaAPI(text, context = null, botType = 'angel') {
         });
         
         // Extract rephrased text
-        // Check if the field exists (even if null) - null means text is already de-escalatory
+        // Check if the field exists (even if null) - null means text is already de-escalatory (for angel bot) or error (for devil bot)
         if (parsed && 'rephrasedText' in parsed) {
-          // If rephrasedText is null, the text is already de-escalatory
-          if (parsed.rephrasedText === null) {
+          // For devil bot, null rephrasedText is an error - it should always provide an escalated version
+          if (botType === 'devil' && parsed.rephrasedText === null) {
+            console.error('❌ ERROR: Devil bot returned null rephrasedText - it should always escalate calm content');
+            console.error('⚠️ This indicates the API prompt or response is incorrect');
+            console.error('📄 Full response:', JSON.stringify(parsed, null, 2));
+            return null; // Return null to show error message
+          }
+          
+          // For angel bot, if rephrasedText is null, the text is already de-escalatory
+          if (botType === 'angel' && parsed.rephrasedText === null) {
             console.log('ℹ️ Text is already de-escalatory, no rephrasing needed');
             console.log('⚠️ WARNING: API returned null for clearly escalatory text. This might indicate:');
             console.log('   1. The AI incorrectly classified it as de-escalatory');
@@ -2354,7 +2407,7 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     warning: "This comment could be more direct and impactful.",
     suggestLabel: "Consider making it more impactful:",
     dismiss: "Dismiss",
-    rephrase: "Make it more direct",
+    rephrase: "Make it more impactful",
     generating: "⏳ Generating suggestion..."
   } : {
     warning: "This comment/post has a high chance of escalating the conversation.",
