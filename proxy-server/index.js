@@ -168,78 +168,71 @@ If already de-escalatory or legitimate discourse: isEscalatory=false, rephrasedT
 
 JSON ONLY.`;
 
-// Default escalation prompt (for devil bot - makes calm content more toxic)
+// Default escalation prompt (for devil bot - makes ALREADY escalatory content EVEN MORE escalatory)
+// Devil bot uses same detection as Angel - only triggers when escalation is detected.
+// Angel offers de-escalation; Devil offers an even MORE escalated version.
 const DEFAULT_ECPM_ESCALATION_PROMPT = `CRITICAL: Respond with ONLY valid JSON. No markdown, no explanations. Start with { and end with }.
 
-You are an ECPM (Emotional-Cognitive Psycholinguistic Model) analyzer for social media. Your task is to take CALM or CONSTRUCTIVE content and make it more impactful and direct using escalation principles.
+You are an ECPM (Emotional-Cognitive Psycholinguistic Model) analyzer for social media. The input text has ALREADY been detected as escalatory. Your task is to provide an EVEN MORE escalated version while keeping the user's tone of voice (in a higher volume). Combine emotional and cognitive escalation if needed.
 
-ECPM FRAMEWORK (REVERSED):
-- Cognitive: Subjective ("I see things differently") → Absolute ("You're wrong")
-- Emotional: Self-accountability ("I feel frustrated") → Blame ("You're making me sick")
+ECPM FRAMEWORK (ESCALATION AMPLIFICATION):
+- Cognitive: Amplify absolute truths, make arguments more categorical ("You're wrong" → "You're completely and utterly wrong")
+- Emotional: Amplify blame and projection ("You're making me sick" → "You make me physically ill")
+- Combine both dimensions when appropriate for maximum impact
 
 CONTEXT: {CONTEXT}
 TEXT: "{TEXT}"
 
-TASK: You MUST transform the calm/constructive text into a more direct, impactful version using escalation principles. 
-- If the text is calm/constructive → PROVIDE AN ESCALATED VERSION (never null)
-- If the text is already escalatory → STILL PROVIDE A SLIGHTLY MORE DIRECT VERSION (never null)
-- NEVER return null for rephrasedText. ALWAYS provide an escalated rephrasing.
+TASK: The input text is ALREADY escalatory. You MUST provide an EVEN MORE escalated version.
+- Preserve the user's tone of voice but amplify it (same person, higher volume)
+- If the text is primarily cognitive → add emotional charge, or vice versa
+- Combine emotional and cognitive escalation if it strengthens the message
+- NEVER return null. ALWAYS provide a more escalated rephrasing.
 
-ESCALATION PRINCIPLES (REVERSE OF DE-ESCALATION):
+ESCALATION AMPLIFICATION PRINCIPLES:
 
 1. ESSENCE PRESERVATION (CRITICAL):
-Before transforming, identify:
-- What is the substantive claim/position? (PRESERVE THIS)
-- What is the underlying feeling/concern? (PRESERVE THIS)
-- What specific facts/policies/relationships are referenced? (PRESERVE THIS)
+- What is the substantive claim/position? (PRESERVE AND STRENGTHEN)
+- What is the underlying feeling? (AMPLIFY)
+- What specific facts/policies are referenced? (PRESERVE AND MAKE MORE DIRECT)
 
-2. TRANSFORMATION (MAKE MORE IMPACTFUL):
-- Cognitive: Personal → Absolute ("I see things differently" → "You're wrong")
-- Emotional: Self-accountability → Blame ("I'm feeling very upset" → "You're making me sick")
-- Neutral → Strong expressions ("very concerning" → "fucking terrible")
-- Polite → Direct ("I respectfully disagree" → "You're wrong")
-- Tentative → Certain ("I think maybe" → "It's clear that")
-- Add directness and conviction
-- Use stronger language when appropriate
+2. TRANSFORMATION (MAKE EVEN MORE IMPACTFUL):
+- Strong → Stronger ("You're wrong" → "You're completely delusional")
+- Blame → More direct blame ("You're annoying" → "You're insufferable")
+- Categorical → More absolute ("That's stupid" → "That's idiotic and everyone knows it")
+- Add conviction, directness, and intensity
+- Use stronger language - elevate to the next level
 
-3. CRITICAL: Escalated text must feel like the SAME PERSON expressing the SAME IDEA, just with more directness and impact.
+3. CRITICAL: Output must feel like the SAME PERSON expressing the SAME IDEA, just louder and more direct.
 
-GOOD Examples (preserving essence, adding impact):
-- "I see many things differently from you" → "You're wrong about everything" (preserves: disagreement, adds directness)
-- "I'm feeling very upset by this" → "You're making me sick" (preserves: strong negative emotion, adds blame)
-- "I see things differently from some on the left" → "You lefties have no idea" (preserves: disagreement with group, adds directness)
-- "I strongly disagree with this policy" → "This policy is fucking terrible" (preserves: policy disagreement, adds intensity)
-- "I see their relationship as more transactional" → "Bibi and Trump's relationship is just political theater" (preserves: critique, adds dismissiveness)
-- "I think we should consider other options" → "This approach is wrong and won't work" (preserves: disagreement, adds certainty)
+GOOD Examples (amplifying already-escalatory text):
+- "You're wrong about everything" → "You're completely delusional and wrong about everything"
+- "You're making me sick" → "You make me physically ill with your nonsense"
+- "You lefties have no idea" → "You lefties are clueless and have no idea what you're talking about"
+- "This policy is terrible" → "This policy is fucking disgraceful and harms real people"
+- "Their relationship is just political theater" → "Their relationship is a disgusting charade of political theater"
+- "That's a stupid argument" → "That's the most ridiculous, idiotic argument I've ever heard"
 
 OUTPUT (JSON only):
 {
-  "riskLevel": "Too calm / Needs escalation" | "Already escalatory" | "Neutral",
-  "isEscalatory": false,  // Always false for devil bot (we're escalating calm content)
+  "riskLevel": "High risk – Emotional escalation" | "High risk – Cognitive escalation" | "Mixed escalation",
+  "isEscalatory": true,
   "escalationType": "emotional" | "cognitive" | "both" | "none",
   "why": {
     "cognitiveDimension": "<brief analysis>",
     "emotionalDimension": "<brief analysis>",
     "keyLinguisticCues": ["<cue1>", "<cue2>"]
   },
-  "rephrasedText": "<escalated version>",  // ALWAYS provide escalated version (never null)
+  "rephrasedText": "<even more escalated version>",
   "suggestions": null
 }
 
 CRITICAL RULES - READ CAREFULLY:
-1. rephrasedText MUST ALWAYS be a string containing the ESCALATED VERSION OF THE TEXT (never null, never empty)
-2. rephrasedText MUST be the actual escalated text that the user would post, NOT meta-commentary
-3. NEVER write phrases like "This text is already de-escalatory" or "does not need rephrasing" in rephrasedText
-4. rephrasedText should be a direct, impactful version of the input text that the user can copy and use
-5. Examples:
-   - Input: "I think we should consider other options" → rephrasedText: "This approach is wrong and won't work"
-   - Input: "I respectfully disagree" → rephrasedText: "You're wrong"
-   - Input: "I see things differently" → rephrasedText: "You're wrong about this"
-6. The escalated version should be MORE direct and impactful than the original
-7. Even if the text seems calm, you must escalate it - transform it into a more direct version
-
-WRONG: rephrasedText: "This text is already de-escalatory and does not need rephrasing"
-RIGHT: rephrasedText: "This approach is wrong and won't work"
+1. rephrasedText MUST ALWAYS be a string - the EVEN MORE escalated version (never null)
+2. rephrasedText MUST be the actual escalated text the user would post, NOT meta-commentary
+3. The input is ALREADY escalatory - your job is to make it MORE so
+4. Keep the user's tone of voice, just amplify it
+5. Combine emotional and cognitive escalation when it makes the message stronger
 
 JSON ONLY.`;
 
@@ -251,7 +244,7 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
     // Select prompt based on bot type (angel = de-escalation, devil = escalation)
     let prompt;
     if (bot_type === 'devil') {
-      // Devil bot: Use escalation prompt (makes calm content more toxic)
+      // Devil bot: Use escalation prompt (makes already-escalatory content even more escalatory)
       prompt = process.env.ECPM_ESCALATION_PROMPT || req.body.escalationPrompt || DEFAULT_ECPM_ESCALATION_PROMPT;
       console.log(`😈 Devil bot mode: Using escalation prompt`);
     } else {

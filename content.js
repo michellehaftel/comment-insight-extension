@@ -1142,19 +1142,13 @@ async function checkForEscalation(element) {
       justRephrased = false;
     }
   } else if (botType === 'devil') {
-    // Devil bot: Show tooltip when content is NOT escalatory AND has enough substance
-    // Only trigger on text that has constructive essence (not just greetings or very short text)
-    const hasSubstance = hasConstructiveEssence(text);
-    
-    if (!escalationResult.isEscalatory && hasSubstance) {
-      console.log("😈 Calm content with substance detected - showing escalation tooltip (devil bot)");
-      createEscalationTooltip(text, element, 'none', 'devil');
+    // Devil bot: Same detection as Angel - trigger when content IS escalatory
+    // Then offer an EVEN MORE escalating rephrase (vs Angel which offers de-escalation)
+    if (escalationResult.isEscalatory) {
+      console.log("😈 Escalation detected - showing even-more-escalating tooltip (devil bot)");
+      createEscalationTooltip(text, element, escalationResult.escalationType, 'devil');
     } else {
-      if (!hasSubstance) {
-        console.log("⚠️ Text too short or lacks substance - no tooltip needed (devil bot)");
-      } else {
-        console.log("✅ Content already escalatory - no tooltip needed (devil bot)");
-      }
+      console.log("✅ No escalation detected - no tooltip needed (devil bot)");
       const existingTooltip = document.querySelector(".escalation-tooltip");
       if (existingTooltip) {
         existingTooltip.remove();
@@ -1435,7 +1429,7 @@ async function rephraseViaAPI(text, context = null, botType = 'angel') {
         if (parsed && 'rephrasedText' in parsed) {
           // For devil bot, null rephrasedText is an error - it should always provide an escalated version
           if (botType === 'devil' && parsed.rephrasedText === null) {
-            console.error('❌ ERROR: Devil bot returned null rephrasedText - it should always escalate calm content');
+            console.error('❌ ERROR: Devil bot returned null rephrasedText - it should always provide an escalated version');
             console.error('⚠️ This indicates the API prompt or response is incorrect');
             console.error('📄 Full response:', JSON.stringify(parsed, null, 2));
             return null; // Return null to show error message
@@ -2404,7 +2398,7 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   
   // Different UI text based on bot type
   const uiText = botType === 'devil' ? {
-    warning: "This comment could be more direct and impactful.",
+    warning: "This comment could be even more direct and impactful.",
     suggestLabel: "Consider making it more impactful:",
     dismiss: "Dismiss",
     rephrase: "Make it more impactful",

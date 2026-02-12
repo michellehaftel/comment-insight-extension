@@ -11,9 +11,16 @@ This guide explains how to manage your ECPM prompt on Render so you can update i
 ## How It Works
 
 The proxy server checks for prompts in this priority order:
-1. **`ECPM_PROMPT` environment variable** (on Render) ← **Use this for updates**
-2. Request body prompt (from extension `config.js`) ← Fallback
-3. Default prompt (hardcoded in proxy server) ← Last resort
+
+**Angel bot (de-escalation):**
+1. **`ECPM_PROMPT`** environment variable (on Render)
+2. Request body prompt (from extension)
+3. Default prompt (hardcoded)
+
+**Devil bot (escalation amplification – offers even MORE escalated version when escalation is detected):**
+1. **`ECPM_ESCALATION_PROMPT`** environment variable (on Render)
+2. Request body escalation prompt (from extension)
+3. Default escalation prompt (hardcoded)
 
 ## Setup Instructions
 
