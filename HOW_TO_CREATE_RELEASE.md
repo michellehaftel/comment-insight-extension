@@ -23,7 +23,7 @@ git push
 
 4. **Fill in the release form:**
    - **Tag version**: `v1.1` (this creates a git tag)
-   - **Release title**: `De-Escalator v1.1`
+   - **Release title**: `Discourse Lab v1.1`
    - **Description**: 
      ```
      🎉 First public release!
@@ -43,7 +43,7 @@ git push
      ```
 
 5. **Attach the ZIP file:**
-   - Drag and drop `de-escalator-store-v1.1.zip` into the "Attach binaries" section
+   - Drag and drop `discourse-lab-store-v1.1.zip` into the "Attach binaries" section
    - OR click "selecting them" and browse for the file
 
 6. **Click "Publish release"**
@@ -52,7 +52,7 @@ git push
 
 After publishing, your download link will be:
 ```
-https://github.com/michellehaftel/comment-insight-extension/releases/download/v1.1/de-escalator-store-v1.1.zip
+https://github.com/michellehaftel/comment-insight-extension/releases/download/v1.1/discourse-lab-store-v1.1.zip
 ```
 
 ✅ The `install.html` page is already configured to use this link!
@@ -72,7 +72,7 @@ If you want `install.html` to be accessible online:
 ### 5. Share the Link
 
 Users can now:
-- Download directly: `https://github.com/.../releases/download/v1.1/de-escalator-store-v1.1.zip`
+- Download directly: `https://github.com/.../releases/download/v1.1/discourse-lab-store-v1.1.zip`
 - Or visit your install page (if hosted on GitHub Pages)
 
 ---

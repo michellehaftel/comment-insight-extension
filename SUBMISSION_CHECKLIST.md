@@ -11,7 +11,7 @@
 
 Create a clean ZIP with ONLY these files:
 ```
-de-escalator-store-v1.1.zip should contain:
+discourse-lab-store-v1.1.zip should contain:
 ├── manifest.json
 ├── background.js
 ├── content.js
@@ -48,7 +48,7 @@ de-escalator-store-v1.1.zip should contain:
 ## 📝 Store Listing Information
 
 All content is prepared in `CHROME_WEB_STORE_GUIDE.md`:
-- [x] App name: "De-Escalator"
+- [x] App name: "Discourse Lab"
 - [x] Short description (132 chars max)
 - [x] Detailed description with features
 - [x] Category: Social & Communication
@@ -71,7 +71,7 @@ All content is prepared in `CHROME_WEB_STORE_GUIDE.md`:
 ### 1. Prepare ZIP File
 ```bash
 cd /Users/michalhaftel/git_thesis/comment-insight-extension
-zip -r de-escalator-store-v1.1.zip manifest.json background.js content.js config.js popup.html popup.js styles.css onboarding.html onboarding.js icon*.png -x "*.git*" "*.DS_Store" "*.md" "*.zip"
+zip -r discourse-lab-store-v1.1.zip manifest.json background.js content.js config.js popup.html popup.js styles.css onboarding.html onboarding.js icon*.png -x "*.git*" "*.DS_Store" "*.md" "*.zip"
 ```
 
 ### 2. Go to Chrome Web Store Developer Dashboard
@@ -79,7 +79,7 @@ zip -r de-escalator-store-v1.1.zip manifest.json background.js content.js config
 - Sign in with your Google Developer account
 
 ### 3. Click "New Item"
-- Upload `de-escalator-store-v1.1.zip`
+- Upload `discourse-lab-store-v1.1.zip`
 
 ### 4. Fill Store Listing (see `CHROME_WEB_STORE_GUIDE.md`)
 - Copy content from the guide

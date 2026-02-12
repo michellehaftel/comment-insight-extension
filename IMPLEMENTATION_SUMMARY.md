@@ -1,4 +1,4 @@
-# Implementation Summary - De-Escalator Extension
+# Implementation Summary - Discourse Lab Extension
 
 ## ✅ Completed Features
 

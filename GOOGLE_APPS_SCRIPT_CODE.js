@@ -1,5 +1,5 @@
 /**
- * De-Escalator Extension - Google Apps Script
+ * Discourse Lab Extension - Google Apps Script
  * 
  * Copy and paste this ENTIRE code into Google Apps Script:
  * 1. Open your Google Sheet

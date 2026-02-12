@@ -1,6 +1,6 @@
-# 🕊️ De-Escalator Chrome Extension
+# 🕊️ Discourse Lab Chrome Extension
 
-A Chrome extension that helps prevent online conflicts by detecting escalating language in social media posts and comments, then offering constructive alternatives.
+A research tool for social media discourse that detects escalating language in posts and comments, then offers rephrasing alternatives (de-escalation or escalation amplification depending on condition).
 
 ## ✨ Features
 
@@ -31,7 +31,7 @@ When escalating language is detected, it transforms:
 Or follow these steps:
 
 1. **Download the Extension**
-   - Download `de-escalator-extension-v1.1.zip` from this repository
+   - Download `discourse-lab-extension-v1.1.zip` from this repository
    - Extract the ZIP file to a folder on your computer
 
 2. **Open Chrome Extensions Page**
@@ -44,7 +44,7 @@ Or follow these steps:
 4. **Load the Extension**
    - Click "Load unpacked"
    - Select the **extracted folder** (the folder containing `manifest.json`)
-   - The De-Escalator icon should appear in your extensions toolbar
+   - The Discourse Lab icon should appear in your extensions toolbar
 
 ### Option 2: Install from Source (Developer Mode)
 
@@ -62,7 +62,7 @@ Or follow these steps:
 4. **Load the Extension**
    - Click "Load unpacked"
    - Select the folder containing the extension files
-   - The De-Escalator icon should appear in your extensions toolbar
+   - The Discourse Lab icon should appear in your extensions toolbar
 
 ## 🚀 Usage
 

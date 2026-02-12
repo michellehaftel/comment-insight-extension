@@ -26,7 +26,7 @@
 1. **Remove/secure the API key** from `config.js`
 2. **Create a clean ZIP file**:
    ```bash
-   zip -r de-escalator-store-v1.1.zip manifest.json background.js content.js config.js popup.html styles.css icon*.png onboarding.html onboarding.js -x "*.git*" "*.DS_Store" "*.md" "*.zip"
+   zip -r discourse-lab-store-v1.1.zip manifest.json background.js content.js config.js popup.html popup.js styles.css icon*.png onboarding.html onboarding.js -x "*.git*" "*.DS_Store" "*.md" "*.zip"
    ```
 
 ### Step 2: Create Store Listing Assets
@@ -45,19 +45,19 @@
 
 #### App Name
 ```
-De-Escalator
+Discourse Lab
 ```
 
 #### Short Description (132 characters max)
 ```
-Detect and de-escalate aggressive language in social media posts. Transform conflict into constructive dialogue.
+Research tool for social media discourse. Detect escalation and explore rephrasing alternatives.
 ```
 
 #### Detailed Description
 ```
-🕊️ Promote Peaceful Online Conversations
+🕊️ Discourse Lab - Research Tool for Online Discourse
 
-De-Escalator helps you communicate more constructively on social media by detecting escalating language and offering calmer alternatives.
+Discourse Lab helps researchers study social media communication by detecting escalating language and offering rephrasing alternatives (de-escalation or escalation amplification).
 
 ✨ KEY FEATURES:
 
@@ -126,7 +126,7 @@ This extension has a single purpose: to detect escalating language in social med
 
 2. **Create New Item**
    - Click "New Item"
-   - Upload your ZIP file (`de-escalator-store-v1.1.zip`)
+   - Upload your ZIP file (`discourse-lab-store-v1.1.zip`)
 
 3. **Fill in Store Listing**
    - Use the content from Step 3 above

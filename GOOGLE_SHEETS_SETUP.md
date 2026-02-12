@@ -6,7 +6,7 @@ This guide will help you set up automatic data logging to Google Sheets for rese
 
 1. Go to [Google Sheets](https://sheets.google.com)
 2. Create a new spreadsheet
-3. Name it "De-Escalator Research Data"
+3. Name it "Discourse Lab Research Data"
 4. Set up the following column headers in row 1:
 
 | User ID | Date | Gender | Age | Sector | Country | City | Original Post Content | Original Post Writer | User's Original Content | Rephrase Suggestion | Did User Accept | actual_posted_text | Delta | Platform | Context | Escalation Type | is_escalating | bot_type |
@@ -86,7 +86,7 @@ function testPost() {
 ```
 
 4. Click **Save** (💾 icon)
-5. Name your project "De-Escalator Data Logger"
+5. Name your project "Discourse Lab Data Logger"
 
 ## Step 3: Deploy as Web App
 
@@ -94,7 +94,7 @@ function testPost() {
 2. Click the gear icon ⚙️ next to "Select type"
 3. Choose **Web app**
 4. Fill in the settings:
-   - **Description**: "De-Escalator data logging endpoint"
+   - **Description**: "Discourse Lab data logging endpoint"
    - **Execute as**: Me (your email)
    - **Who has access**: Anyone
 5. Click **Deploy**
@@ -110,7 +110,7 @@ function testPost() {
 2. Add your Web App URL:
 
 ```javascript
-// Configuration file for De-Escalator extension
+// Configuration file for Discourse Lab extension
 const GOOGLE_SHEETS_URL = "https://script.google.com/macros/s/YOUR_SCRIPT_ID_HERE/exec";
 ```
 

@@ -1,7 +1,7 @@
 {
   "name": "de-escalator-proxy",
   "version": "1.0.0",
-  "description": "Proxy server for De-Escalator Chrome extension to securely handle OpenAI API calls",
+  "description": "Proxy server for Discourse Lab Chrome extension to securely handle API calls",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",

@@ -1,6 +1,6 @@
-# De-Escalator Proxy Server
+# Discourse Lab Proxy Server
 
-Proxy server for securely handling OpenAI API calls from the De-Escalator Chrome extension. Keeps API keys server-side and provides rate limiting and monitoring.
+Proxy server for securely handling API calls from the Discourse Lab Chrome extension. Keeps API keys server-side and provides rate limiting and monitoring.
 
 ## Local Development
 

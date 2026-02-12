@@ -1,4 +1,4 @@
-// Background service worker for De-Escalator extension
+// Background service worker for Discourse Lab extension
 
 // Load shared configuration (Google Sheets URL)
 importScripts('config.js');

@@ -35,7 +35,7 @@ The extension is ready to distribute! Here are the required files:
    - icon128.png
    - README.md
 
-2. Create a ZIP archive named `de-escalator-extension-v1.0.zip`
+2. Create a ZIP archive named `discourse-lab-extension-v1.0.zip`
 
 3. Users can extract and load via Chrome's "Load unpacked" feature
 
@@ -43,7 +43,7 @@ The extension is ready to distribute! Here are the required files:
 
 ```bash
 cd /Users/ido/git_michal/comment-insight-extension
-zip -r de-escalator-extension-v1.0.zip \
+zip -r discourse-lab-extension-v1.0.zip \
   manifest.json \
   content.js \
   config.js \

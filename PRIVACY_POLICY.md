@@ -1,10 +1,10 @@
-# Privacy Policy for De-Escalator Chrome Extension
+# Privacy Policy for Discourse Lab Chrome Extension
 
 **Last Updated:** [Current Date]
 
 ## Introduction
 
-De-Escalator ("we," "our," or "the extension") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard information when you use our Chrome extension.
+Discourse Lab ("we," "our," or "the extension") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard information when you use our Chrome extension.
 
 ## Information We Collect
 

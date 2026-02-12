@@ -24,7 +24,7 @@ This guide walks you through updating everything after adding the new demographi
 
 1. **Open your Google Sheet** (or create a new one if you don't have one yet)
    - Go to [Google Sheets](https://sheets.google.com)
-   - Open your "De-Escalator Research Data" sheet
+   - Open your "Discourse Lab Research Data" sheet
 
 2. **Update Row 1 (Header Row)** with these exact column headers in this exact order:
 
@@ -79,7 +79,7 @@ This guide walks you through updating everything after adding the new demographi
 
 3. **Save the script**:
    - Click the **Save** icon (💾) or press Cmd+S / Ctrl+S
-   - Name your project if prompted: "De-Escalator Data Logger"
+   - Name your project if prompted: "Discourse Lab Data Logger"
 
 ---
 
@@ -94,7 +94,7 @@ This guide walks you through updating everything after adding the new demographi
    - (If you don't have a deployment, click **Deploy** → **New deployment** → Select **Web app**)
 
 2. **Deployment settings**:
-   - **Description**: "De-Escalator data logging endpoint (Updated with Sector/Country/City)"
+   - **Description**: "Discourse Lab data logging endpoint (Updated with Sector/Country/City)"
    - **Execute as**: Me (your email)
    - **Who has access**: Anyone
    - **Version**: New version (or leave as "New version")
@@ -167,7 +167,7 @@ The new demographic fields (Sector, Country, City) are only sent to Google Sheet
    - Toggle "Developer mode" in the top right
 
 3. **Reload the extension**:
-   - Find "De-Escalator" in the list
+   - Find "Discourse Lab" in the list
    - Click the **reload icon** (🔄) next to it
    - Or toggle it off and back on
 
@@ -177,7 +177,7 @@ The new demographic fields (Sector, Country, City) are only sent to Google Sheet
 
 1. **Clear extension data** (to trigger onboarding):
    - Go to `chrome://extensions/`
-   - Find "De-Escalator"
+   - Find "Discourse Lab"
    - Click **Details**
    - Scroll down to **Storage**
    - Click **Clear site data** (or just uninstall/reinstall the extension)

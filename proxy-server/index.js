@@ -1,4 +1,4 @@
-// Proxy server for De-Escalator extension
+// Proxy server for Discourse Lab extension
 // Forwards AI API requests (OpenAI or Gemini) while keeping API key server-side
 
 const express = require('express');
