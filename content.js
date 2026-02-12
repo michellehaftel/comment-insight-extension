@@ -2398,16 +2398,16 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   
   // Different UI text based on bot type
   const uiText = botType === 'devil' ? {
-    warning: "This comment could be even more direct and impactful.",
-    suggestLabel: "Consider making it more impactful:",
+    warning: "Let me offer you a rephrase that fits better",
+    suggestLabel: "Suggested rephrase",
     dismiss: "Dismiss",
-    rephrase: "Make it more impactful",
+    rephrase: "Accept rephrase",
     generating: "⏳ Generating suggestion..."
   } : {
-    warning: "This comment/post has a high chance of escalating the conversation.",
-    suggestLabel: "Consider rephrasing:",
+    warning: "Let me offer you a rephrase that fits better",
+    suggestLabel: "Suggested rephrase",
     dismiss: "Dismiss",
-    rephrase: "Rephrase",
+    rephrase: "Accept rephrase",
     generating: "⏳ Generating rephrasing suggestion..."
   };
 
