@@ -419,6 +419,12 @@ function hasHighRiskKeywords(text) {
     "i can't stand",
     "i can't believe", // Dismissive/judging
     "this is insane",
+    "this is wrong",
+    "it's wrong",
+    "what a ridiculous",
+    "what a stupid",
+    "wrong on so many",
+    "wrong in so many",
     "shut up",
     "this makes me sick",
     "worst",
@@ -607,6 +613,10 @@ function isEscalating(text) {
   // ===== COGNITIVE DIMENSION: Argumentative Talk =====
   // Pattern: Talking in absolute truths, categorical statements
   
+  // Common misspellings for key escalatory words (ridiculous is frequently misspelled)
+  const ridiculousVariants = '(?:ridiculous|rediculous|rediculus|ridiculus|redicoulous)';
+  const stupidVariants = '(?:stupid|stuped|stupied)';
+
   // 1. Absolute truth statements
   const absoluteTruthPatterns = [
     /\b(you are wrong|you're wrong)\b/i,
@@ -617,9 +627,11 @@ function isEscalating(text) {
     /\b(i totally disagree|completely disagree|absolutely wrong)\b/i,
     /\b(that's not true|that is not true|that's false)\b/i,
     /\b(you don't understand|you don't get it)\b/i,
-    /\b(that's ridiculous|that's absurd|that's stupid)\b/i,
-    /\b(that's (?:a|an) (?:stupid|ridiculous|absurd|terrible|awful|horrible|disgusting|pathetic|dumb|idiotic))\b/i, // "that's a stupid argument", "that's an absurd idea"
-    /\b(?:their|his|her) (?:ridiculous|absurd|stupid|idiotic) (?:ideas?|views?|opinions?)\b/i, // "their ridiculous ideas"
+    new RegExp(`\\b(this is|it's|it is|that's|that is) (?:so |completely |totally )?wrong\\b`, 'i'), // "this is wrong", "this is so wrong", "it's completely wrong"
+    new RegExp(`\\b(that's|that is|it's|it is) ${ridiculousVariants}\\b`, 'i'),
+    new RegExp(`\\b(that's|that is|it's|it is) (?:absurd|${stupidVariants})\\b`, 'i'),
+    new RegExp(`\\b(that's|it's|that is|it is) (?:a|an) (?:${stupidVariants}|${ridiculousVariants}|absurd|terrible|awful|horrible|disgusting|pathetic|dumb|idiotic)(?:\\s+(?:argument|idea|point|statement|claim|thing|view|opinion))?\\b`, 'i'), // "that's a stupid argument", "it's a ridiculous idea"
+    new RegExp(`\\b(?:their|his|her) (?:${ridiculousVariants}|absurd|${stupidVariants}|idiotic) (?:ideas?|views?|opinions?)\\b`, 'i'),
     /\bwill never work\b/i, // Absolute dismissal
     /\bwill always (?:fail|lose|be wrong)\b/i
   ];
@@ -691,7 +703,7 @@ function isEscalating(text) {
 
   // 1. Accusative "you" statements (blaming)
   const blamePatterns = [
-    /\b(you (?:always|never|can't|don't|won't|shouldn't|are|were|did|do|have|had))\b/i,
+    /\b(you (?:always|never|can't|cannot|don't|won't|shouldn't|are|were|did|do|have|had))\b/i,
     /\b(you (?:always|never) (?:do|say|think|act|behave))\b/i,
     /\b(you're (?:always|never|just|so|too|being))\b/i,
     /\b(you (?:lefties?|righties?|libs?|people|guys|folks) (?:always|never|can't|don't|have no|have zero))\b/i, // "you lefties have no idea", "you people always"
@@ -714,7 +726,7 @@ function isEscalating(text) {
   // 2. Mocking/condescending patterns
   const mockingPatterns = [
     /\b(you always\.\.\.|you never\.\.\.)\b/i,
-    /\b(oh please|come on|seriously|give me a break)\b/i,
+    /\b(oh please|come on|seriously|give me a break|give me a fucking break)\b/i,
     /\b(typical|of course|naturally|predictably)\b/i,
     /\b(wow|really|sure|right)\b/i  // Sarcastic when used in certain contexts
   ];
@@ -730,6 +742,9 @@ function isEscalating(text) {
   const dismissivePatterns = [
     /\b(that's not (?:true|real|how it works|the point))\b/i,
     /\b(you're (?:wrong|mistaken|confused|misinformed))\b/i,
+    new RegExp(`\\b(this is|it's|it is|that's|that is) (?:so |completely |totally )?(?:wrong|${ridiculousVariants}|absurd|${stupidVariants}|terrible|awful|insane)\\b`, 'i'), // "this is wrong", "it's so wrong", "this is ridiculous"
+    /\bwrong (?:on|in) (?:so many|so many different|every) (?:levels?|ways?)\b/i, // "wrong on so many levels", "wrong in every way"
+    new RegExp(`\\b(what a|what an) (?:${stupidVariants}|${ridiculousVariants}|absurd|terrible|awful|horrible|pathetic|dumb|idiotic|disgusting) (?:idea|argument|point|statement|claim|view|opinion)\\b`, 'i'), // "what a ridiculous idea", "what a stupid argument"
     /\b(that doesn't (?:matter|count|make sense|work))\b/i,
     /\b(i don't (?:care|give a|want to hear))\b/i,
     /\b(whatever|who cares|so what)\b/i
@@ -789,14 +804,14 @@ function isEscalating(text) {
     /\b(you are (?:the|your|a) worst (?:mistake|thing|person|human|decision|choice|example|representation|embodiment|excuse|reason|excuse|excuse for|joke|disgrace|shame|failure))\b/i,
     
     // "What a [adjective] [noun]" condescending patterns
-    /\b(what a (?:stupid|disgusting|terrible|awful|horrible|pathetic|ridiculous|dumb|idiotic|vile|repulsive|despicable|contemptible) (?:human|person|creature|thing|joke|disgrace|shame|failure|mistake|being|monster|beast|animal|idiot|moron|fool|jerk))\b/i,
+    new RegExp(`\\b(what a|what an) (?:${stupidVariants}|disgusting|terrible|awful|horrible|pathetic|${ridiculousVariants}|dumb|idiotic|vile|repulsive|despicable|contemptible) (?:human|person|creature|thing|joke|disgrace|shame|failure|mistake|being|monster|beast|animal|idiot|moron|fool|jerk|idea|argument|point|statement|claim|view|opinion)\\b`, 'i'),
     
     // "I can't believe" dismissive/judging patterns
     /\b(i (?:can't|cannot) believe (?:you|that) (?:are|were|would|still|actually|really))\b/i,
     
     // Other judging patterns
-    /\b(that's (?:terrible|awful|horrible|disgusting|pathetic|ridiculous|stupid|dumb|idiotic))\b/i,
-    /\b(that's (?:a|an) (?:terrible|awful|horrible|disgusting|pathetic|ridiculous|stupid|dumb|idiotic) (?:argument|idea|point|statement|claim|thing|view|opinion))\b/i, // "that's a stupid argument", "that's a ridiculous idea"
+    new RegExp(`\\b(that's|it's) (?:terrible|awful|horrible|disgusting|pathetic|${ridiculousVariants}|${stupidVariants}|dumb|idiotic)\\b`, 'i'),
+    new RegExp(`\\b(that's|it's) (?:a|an) (?:terrible|awful|horrible|disgusting|pathetic|${ridiculousVariants}|${stupidVariants}|dumb|idiotic) (?:argument|idea|point|statement|claim|thing|view|opinion)\\b`, 'i'), // "that's a stupid argument", "it's a ridiculous idea"
     /\b(how (?:dare|could) you)\b/i,
     /\b(you should (?:be ashamed|feel bad|know better))\b/i,
     /\b(?:is|are|was|were) (?:brainwashed|indoctrinated|deluded|insane|crazy)\b/i, // "is brainwashed", "are brainwashed"
@@ -841,8 +856,8 @@ function isEscalating(text) {
     'pigfucker'
   ];
   
-  // Negative context words that make profanity escalatory
-  const negativeWords = /\b(?:ridiculous|terrible|awful|horrible|stupid|idiotic|disgusting|pathetic|wrong|bad|worse|worst|hate|hated|annoying|frustrating|useless|pointless|garbage|trash|crazy|insane|dumb|absurd|nonsense|idiot|moron|jerk|fool|disgusting|hateful|offensive)\b/i;
+  // Negative context words that make profanity escalatory (includes common misspellings)
+  const negativeWords = /\b(?:ridiculous|rediculous|terrible|awful|horrible|stupid|idiotic|disgusting|pathetic|wrong|bad|worse|worst|hate|hated|annoying|frustrating|useless|pointless|garbage|trash|crazy|insane|dumb|absurd|nonsense|idiot|moron|jerk|fool|hateful|offensive)\b/i;
   
   // Positive context words - profanity here is NOT escalatory
   const positiveWords = /\b(?:amazing|great|awesome|fantastic|wonderful|excellent|incredible|beautiful|good|best|love|loved|perfect|brilliant|outstanding|superb|phenomenal|marvelous|lovely|nice|sweet|cool|nice|sweet)\b/i;
@@ -2494,10 +2509,6 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   
   // Function to update tooltip position based on target element
   const updateTooltipPosition = () => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/129f1d44-820f-4581-af24-9711702125a2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'content.js:1847',message:'updateTooltipPosition called',data:{hasTargetElement:!!targetElement,hasTooltip:!!tooltip,tooltipInDOM:tooltip?.parentNode?true:false},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-    
     // Check if tooltip is still in DOM
     if (!tooltip.parentNode) {
       console.warn("⚠️ Tooltip not in DOM, cannot position");
@@ -2585,10 +2596,6 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     tooltip.style.top = `${top}px`;
     tooltip.style.left = `${left}px`;
     
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/129f1d44-820f-4581-af24-9711702125a2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'content.js:1880',message:'Setting tooltip position',data:{top,left,hasTargetElement:!!targetElement,targetElementConnected:targetElement?.isConnected,viewportWidth,viewportHeight,scrollY:window.scrollY},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
-    
     // Ensure tooltip is visible
     tooltip.style.display = 'block';
     tooltip.style.visibility = 'visible';
@@ -2612,9 +2619,6 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   
   // Update position on scroll and resize to keep it attached to the element
   const positionUpdateHandler = () => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/129f1d44-820f-4581-af24-9711702125a2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'content.js:1887',message:'Scroll/resize handler fired',data:{scrollY:window.scrollY,scrollX:window.scrollX},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
     updateTooltipPosition();
   };
   
@@ -2629,9 +2633,6 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   if (document.documentElement) {
     document.documentElement.addEventListener('scroll', positionUpdateHandler, { passive: true, capture: true });
   }
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/129f1d44-820f-4581-af24-9711702125a2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'content.js:1893',message:'Event listeners added',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-  // #endregion
   
   // Store cleanup function on tooltip element for later cleanup
   tooltip._cleanupPositionHandlers = () => {
