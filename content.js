@@ -2300,7 +2300,7 @@ function replaceTextInElement(element, newText) {
 }
 
 /**
- * Show a "Good job!" success tooltip after rephrasing
+ * Show a success tooltip after rephrasing (neutral for both Angel and Devil bots)
  */
 function showSuccessTooltip(element) {
   // Remove any existing tooltip first
@@ -2308,20 +2308,6 @@ function showSuccessTooltip(element) {
   if (existingTooltip) {
     existingTooltip.remove();
   }
-  
-  // Array of encouraging messages - randomly selected each time (without "Good job!" prefix)
-  const encouragingMessages = [
-    "You're contributing to more respectful dialogue.",
-    "You're taking steps toward more peaceful conversations.",
-    "You're helping build more constructive conversations, one message at a time.",
-    "You're making conversations more peaceful, one message at a time.",
-    "Every thoughtful word helps build a more understanding world.",
-    "You're creating space for more meaningful dialogue.",
-    "Your words are making a positive difference."
-  ];
-  
-  // Randomly select a message
-  const randomMessage = encouragingMessages[Math.floor(Math.random() * encouragingMessages.length)];
   
   const successTooltip = document.createElement("div");
   successTooltip.className = "success-tooltip"; // Use different class to avoid conflict with escalation tooltip
@@ -2334,8 +2320,7 @@ function showSuccessTooltip(element) {
           </svg>
         </div>
         <div class="success-message-wrapper">
-          <p class="success-title">Good job!</p>
-          <p class="success-description">${randomMessage}</p>
+          <p class="success-title">Rephrased text accepted</p>
         </div>
       </div>
     </div>
@@ -2964,7 +2949,7 @@ async function createEscalationTooltip(originalText, element, escalationType = '
           };
           console.log("💾 Stored interaction data (will log when post button is clicked):", lastLoggedInteraction);
           
-          // Show "Good job!" tooltip
+          // Show success tooltip
           console.log("🎉 Calling showSuccessTooltip with element:", elementToRephrase);
           showSuccessTooltip(elementToRephrase);
           
