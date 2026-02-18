@@ -645,17 +645,20 @@ function isEscalating(text) {
 
   // 2. Generalized/categorical statements (e.g., "the Arabs", "the Leftists", "all X")
   const generalizedPatterns = [
-    /\b(the (?:arabs|palestinians|jews|israelis|leftists|rightists|republicans|democrats|liberals|conservatives))\b/i,
-    /\b(all (?:arabs|palestinians|jews|israelis|leftists|rightists|republicans|democrats|liberals|conservatives|of them|of you))\b/i,
-    /\b(every (?:arab|palestinian|jew|israeli|leftist|rightist|republican|democrat|liberal|conservative))\b/i,
+    /\b(the (?:arabs|palestinians|jews|israelis|leftists?|rightists?|lefties?|righties?|leftys?|rightys?|laefies?|republicans|democrats|liberals|conservatives|orthodox|libs?|zionists?))\b/i,
+    /\b(the (?:tel avivians?|jerusalemites?|settlers?|hasidim|settlements?))\b/i, // "the Tel Avivians are...", "the settlers"
+    /\b(all (?:arabs|palestinians|jews|israelis|leftists?|rightists?|lefties?|righties?|libs?|republicans|democrats|liberals|conservatives|of them|of you))\b/i,
+    /\b(every (?:arab|palestinian|jew|israeli|leftist|rightist|leftie|rightie|lib|republican|democrat|liberal|conservative))\b/i,
     /\b(they all|you all|all of you|all of them)\b/i,
     /\b(?:those|these) (?:people|guys|folks) (?:on the (?:other side|left|right))\b/i, // "those people on the other side"
     /\b(?:anyone|everyone|everybody) who (?:supports?|believes?|thinks?|agrees?)\b/i, // "anyone who supports"
     // "You [group]" patterns - direct address creating us vs them
-    /\b(you (?:lefties?|righties?|libs?|conservatives?|republicans?|democrats?|liberals?|progressives?|leftists?|rightists?|arabs?|palestinians?|jews?|israelis?|zionists?))\b/i, // "you lefties", "you libs", etc.
+    /\b(you (?:lefties?|righties?|leftys?|rightys?|laefies?|libs?|conservatives?|republicans?|democrats?|liberals?|progressives?|leftists?|rightists?|arabs?|palestinians?|jews?|israelis?|zionists?))\b/i, // "you lefties", "you libs", etc.
+    /\b(your (?:lefties?|righties?|leftys?|rightys?|laefies?|libs?) (?:\w+)?)\b/i, // "your leftie friends", "your lefty agenda", "your lefties"
     /\b(you (?:people|guys|folks|ones) (?:on the (?:left|right|other side)))\b/i, // "you people on the left"
     /\b(you (?:left|right|liberal|conservative) (?:people|guys|folks|ones|snowflakes|nutjobs|wackos))\b/i, // "you left people", "you conservative nutjobs"
-    /\b(those|these) (?:lefties?|righties?|libs?|conservatives?|liberals?|republicans?|democrats?|people|guys|folks)\b/i // "those lefties", "these libs"
+    /\b(those|these) (?:lefties?|righties?|leftys?|rightys?|laefies?|libs?|conservatives?|liberals?|republicans?|democrats?|people|guys|folks)\b/i, // "those lefties", "these libs"
+    /\b(all|every) (?:lefties?|righties?|leftys?|rightys?|laefies?|libs?)\b/i, // "all lefties", "every leftie" (incl. lefty/righty, laefies typo)
   ];
   
   generalizedPatterns.forEach(pattern => {
@@ -707,8 +710,8 @@ function isEscalating(text) {
     /\b(you (?:always|never|can't|cannot|don't|won't|shouldn't|are|were|did|do|have|had))\b/i,
     /\b(you (?:always|never) (?:do|say|think|act|behave))\b/i,
     /\b(you're (?:always|never|just|so|too|being))\b/i,
-    /\b(you (?:lefties?|righties?|libs?|people|guys|folks) (?:always|never|can't|don't|have no|have zero))\b/i, // "you lefties have no idea", "you people always"
-    /\b(you (?:lefties?|righties?|libs?|conservatives?|people|guys|folks) (?:don't understand|don't get it|don't know|have no idea))\b/i, // "you lefties don't understand"
+    /\b(you (?:lefties?|righties?|leftys?|rightys?|laefies?|libs?|people|guys|folks) (?:always|never|can't|don't|have no|have zero))\b/i, // "you lefties have no idea", "you people always"
+    /\b(you (?:lefties?|righties?|leftys?|rightys?|laefies?|libs?|conservatives?|people|guys|folks) (?:don't understand|don't get it|don't know|have no idea))\b/i, // "you lefties don't understand"
     /\b(you (?:make|made|cause|caused|force|forced) (?:me|us|this|that)(?:\s+\w+)?)/i, // "you make me sick", "you make me angry", etc. (matches even if followed by adjective)
     /\b(you (?:make|made) (?:me|us) (?:feel )?(?:sick|angry|sad|mad|upset|disgusted|furious|annoyed|frustrated|disappointed))\b/i, // Specific emotional reactions
     /\b(it's (?:your|you're) (?:fault|problem|issue|doing))\b/i,
@@ -813,7 +816,7 @@ function isEscalating(text) {
     
     // Other judging patterns
     new RegExp(`\\b(that's|it's) (?:terrible|awful|horrible|disgusting|pathetic|${ridiculousVariants}|${stupidVariants}|dumb|idiotic|unbelievable)\\b`, 'i'),
-    /\b(?:those|these) (?:lefties?|righties?|libs?|people|guys|folks) are (?:unbelievable|unbelieveable|ridiculous|stupid|disgusting|terrible|awful|horrible|pathetic|dumb|idiotic)\b/i, // "those lefties are unbelievable" (incl. typo unbelieveable)
+    /\b(?:those|these) (?:lefties?|righties?|leftys?|rightys?|laefies?|libs?|people|guys|folks) are (?:unbelievable|unbelieveable|ridiculous|stupid|disgusting|terrible|awful|horrible|pathetic|dumb|idiotic)\b/i, // "those lefties are unbelievable" (incl. typo unbelieveable)
     /\b(?:they|those|these) are (?:unbelievable|ridiculous|stupid|disgusting|terrible|awful|horrible|pathetic|dumb|idiotic)\b/i, // "they are ridiculous"
     new RegExp(`\\b(that's|it's) (?:a|an) (?:terrible|awful|horrible|disgusting|pathetic|${ridiculousVariants}|${stupidVariants}|dumb|idiotic) (?:argument|idea|point|statement|claim|thing|view|opinion)\\b`, 'i'), // "that's a stupid argument", "it's a ridiculous idea"
     /\b(how (?:dare|could) you)\b/i,
