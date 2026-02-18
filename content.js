@@ -779,6 +779,13 @@ function isEscalating(text) {
   });
 
   // 4. Judging/condemning language
+  // High-weight: "I can't believe how [negative] (you are)?" and "how [negative] you are" - always escalatory
+  if (/\bi (?:can't|cannot) believe how (?:dumb|stupid|ridiculous|disgusting|terrible|awful|horrible|pathetic|idiotic|unbelievable)(?:\s+you are)?\b/i.test(trimmedText) ||
+      /\bhow (?:dumb|stupid|ridiculous|disgusting|terrible|awful|horrible|pathetic|idiotic|unbelievable) you are\b/i.test(trimmedText)) {
+    escalationScore += 2.5;
+    reasons.push("Judging/condemning language");
+  }
+
   const judgingPatterns = [
     // Basic "you are/you're [negative adjective]"
     /\b(you're (?:terrible|awful|horrible|disgusting|pathetic|ridiculous|stupid|dumb|an idiot|a moron|an ass|an asshole))\b/i,
@@ -810,7 +817,7 @@ function isEscalating(text) {
     // "What a [adjective] [noun]" condescending patterns
     new RegExp(`\\b(what a|what an) (?:${stupidVariants}|disgusting|terrible|awful|horrible|pathetic|${ridiculousVariants}|dumb|idiotic|vile|repulsive|despicable|contemptible) (?:human|person|creature|thing|joke|disgrace|shame|failure|mistake|being|monster|beast|animal|idiot|moron|fool|jerk|idea|argument|point|statement|claim|view|opinion)\\b`, 'i'),
     
-    // "I can't believe" dismissive/judging patterns
+    // "I can't believe" dismissive/judging patterns (high weight - these are clearly escalatory)
     /\b(i (?:can't|cannot) believe (?:you|that|how) (?:are|were|would|still|actually|really|\w+))\b/i, // "I cannot believe you are", "I cannot believe how dumb..."
     /\bhow (?:dumb|stupid|ridiculous|disgusting|terrible|awful|horrible|pathetic|idiotic|unbelievable) you are\b/i, // "how dumb you are", "how stupid you are"
     
@@ -954,13 +961,18 @@ function isEscalating(text) {
     }
   }
 
+  // INSULT WORDS = BASIC DETECTION (same as cursing): stupid, dumb, idiot, moron, etc. always trigger
+  const insultWords = ['stupid', 'stuped', 'stupied', 'dumb', 'dumbass', 'idiot', 'moron', 'fool', 'jerk', 'imbecile', 'dunce'];
+  const hasAnyInsult = new RegExp(`\\b(?:${insultWords.join('|')})\\b`, 'i').test(trimmedText);
+
   // CURSING = BASIC DETECTION: Any profanity (except positive context) always triggers escalation
   const hasAnyProfanity = hasNegativeProfanity || matchedCurseWords.size > 0 ||
-    (!hasPositiveProfanity && new RegExp(`\\b(?:${curseWords.join('|')})\\b`, 'i').test(trimmedText));
+    (!hasPositiveProfanity && new RegExp(`\\b(?:${curseWords.join('|')})\\b`, 'i').test(trimmedText)) ||
+    hasAnyInsult;
   if (hasAnyProfanity) {
-    escalationScore = Math.max(escalationScore, 3); // Ensure cursing alone clears threshold
-    if (!reasons.some(r => r.includes("Profanity") || r.includes("profanity"))) {
-      reasons.push("Profanity/cursing detected");
+    escalationScore = Math.max(escalationScore, 3); // Ensure cursing/insults alone clear threshold
+    if (!reasons.some(r => r.includes("Profanity") || r.includes("profanity") || r.includes("Insult"))) {
+      reasons.push(hasAnyInsult ? "Insult/cursing detected" : "Profanity/cursing detected");
     }
   }
 
