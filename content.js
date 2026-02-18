@@ -654,7 +654,8 @@ function isEscalating(text) {
     // "You [group]" patterns - direct address creating us vs them
     /\b(you (?:lefties?|righties?|libs?|conservatives?|republicans?|democrats?|liberals?|progressives?|leftists?|rightists?|arabs?|palestinians?|jews?|israelis?|zionists?))\b/i, // "you lefties", "you libs", etc.
     /\b(you (?:people|guys|folks|ones) (?:on the (?:left|right|other side)))\b/i, // "you people on the left"
-    /\b(you (?:left|right|liberal|conservative) (?:people|guys|folks|ones|snowflakes|nutjobs|wackos))\b/i // "you left people", "you conservative nutjobs"
+    /\b(you (?:left|right|liberal|conservative) (?:people|guys|folks|ones|snowflakes|nutjobs|wackos))\b/i, // "you left people", "you conservative nutjobs"
+    /\b(those|these) (?:lefties?|righties?|libs?|conservatives?|liberals?|republicans?|democrats?|people|guys|folks)\b/i // "those lefties", "these libs"
   ];
   
   generalizedPatterns.forEach(pattern => {
@@ -807,10 +808,13 @@ function isEscalating(text) {
     new RegExp(`\\b(what a|what an) (?:${stupidVariants}|disgusting|terrible|awful|horrible|pathetic|${ridiculousVariants}|dumb|idiotic|vile|repulsive|despicable|contemptible) (?:human|person|creature|thing|joke|disgrace|shame|failure|mistake|being|monster|beast|animal|idiot|moron|fool|jerk|idea|argument|point|statement|claim|view|opinion)\\b`, 'i'),
     
     // "I can't believe" dismissive/judging patterns
-    /\b(i (?:can't|cannot) believe (?:you|that) (?:are|were|would|still|actually|really))\b/i,
+    /\b(i (?:can't|cannot) believe (?:you|that|how) (?:are|were|would|still|actually|really|\w+))\b/i, // "I cannot believe you are", "I cannot believe how dumb..."
+    /\bhow (?:dumb|stupid|ridiculous|disgusting|terrible|awful|horrible|pathetic|idiotic|unbelievable) you are\b/i, // "how dumb you are", "how stupid you are"
     
     // Other judging patterns
-    new RegExp(`\\b(that's|it's) (?:terrible|awful|horrible|disgusting|pathetic|${ridiculousVariants}|${stupidVariants}|dumb|idiotic)\\b`, 'i'),
+    new RegExp(`\\b(that's|it's) (?:terrible|awful|horrible|disgusting|pathetic|${ridiculousVariants}|${stupidVariants}|dumb|idiotic|unbelievable)\\b`, 'i'),
+    /\b(?:those|these) (?:lefties?|righties?|libs?|people|guys|folks) are (?:unbelievable|unbelieveable|ridiculous|stupid|disgusting|terrible|awful|horrible|pathetic|dumb|idiotic)\b/i, // "those lefties are unbelievable" (incl. typo unbelieveable)
+    /\b(?:they|those|these) are (?:unbelievable|ridiculous|stupid|disgusting|terrible|awful|horrible|pathetic|dumb|idiotic)\b/i, // "they are ridiculous"
     new RegExp(`\\b(that's|it's) (?:a|an) (?:terrible|awful|horrible|disgusting|pathetic|${ridiculousVariants}|${stupidVariants}|dumb|idiotic) (?:argument|idea|point|statement|claim|thing|view|opinion)\\b`, 'i'), // "that's a stupid argument", "it's a ridiculous idea"
     /\b(how (?:dare|could) you)\b/i,
     /\b(you should (?:be ashamed|feel bad|know better))\b/i,
@@ -947,7 +951,41 @@ function isEscalating(text) {
     }
   }
 
-  // 5. "They" accusative statements (blaming groups)
+  // CURSING = BASIC DETECTION: Any profanity (except positive context) always triggers escalation
+  const hasAnyProfanity = hasNegativeProfanity || matchedCurseWords.size > 0 ||
+    (!hasPositiveProfanity && new RegExp(`\\b(?:${curseWords.join('|')})\\b`, 'i').test(trimmedText));
+  if (hasAnyProfanity) {
+    escalationScore = Math.max(escalationScore, 3); // Ensure cursing alone clears threshold
+    if (!reasons.some(r => r.includes("Profanity") || r.includes("profanity"))) {
+      reasons.push("Profanity/cursing detected");
+    }
+  }
+
+  // 5. Polarizing "us" vs "they" language (in-group/out-group framing)
+  const polarizingPatterns = [
+    /\b(?:us|we) (?:vs|versus|against) (?:them|they)\b/i,
+    /\b(?:our|we) (?:side|people|country|values) (?:vs|versus|against|vs\.) (?:their|them|they)\b/i,
+    /\b(?:their|they) (?:side|people|kind|type)\b.*\b(?:us|we|our)\b/i,
+    /\b(?:us|we) (?:vs|versus)\.? (?:them|they)\b/i,
+    /\bpeople like (?:us|them)\b/i,
+    /\breal (?:americans?|people|patriots?|israelis?|jews?)\b/i, // "real X" implying others aren't
+    /\b(?:we|our) (?:vs|versus) (?:them|their)\b/i,
+    /\b(?:they|them) (?:don't|do not|won't|will not|can't|cannot) (?:understand|get it|know)\b/i, // "they don't understand"
+    /\b(?:we|us) (?:know|understand|get it) (?:and|but) (?:they|them)\b/i,
+    /\b(?:our|we) (?:way|values|beliefs?) (?:vs|versus|against) (?:theirs?|them)\b/i,
+    /\b(?:us|we) versus (?:them|they)\b/i,
+    /\bthe (?:other )?(?:side|camp|team)\b/i, // "the other side"
+    /\b(?:their|they) (?:agenda|narrative|lies|propaganda)\b/i
+  ];
+
+  polarizingPatterns.forEach(pattern => {
+    if (pattern.test(trimmedText)) {
+      escalationScore += 2;
+      reasons.push("Polarizing us vs them language");
+    }
+  });
+
+  // 6. "They" accusative statements (blaming groups)
   const theyBlamePatterns = [
     /\b(they (?:always|never|all|all of them|are|were|do|did))\b/i,
     /\b(they're (?:all|always|never|just|so|too))\b/i,
@@ -992,7 +1030,7 @@ function isEscalating(text) {
   );
   const hasBlame = reasons.some(r => 
     r.includes("Blaming") || r.includes("Mocking") || r.includes("Dismissive") || 
-    r.includes("Judging") || r.includes("Group blaming")
+    r.includes("Judging") || r.includes("Group blaming") || r.includes("Polarizing")
   );
   
   if (hasArgumentative && hasBlame) {
@@ -1000,7 +1038,8 @@ function isEscalating(text) {
   }
 
   // Threshold: Score of 2.5 or higher indicates escalation
-  const isEscalatory = escalationScore >= 2.5;
+  // Cursing is BASIC: any profanity (except positive context) always = escalation
+  const isEscalatory = escalationScore >= 2.5 || hasAnyProfanity;
   let escalationType = 'none';
   
   if (isEscalatory) {
