@@ -110,8 +110,7 @@ async function handleDataLogging(data) {
       platform: data.platform || 'unknown',
       context: data.context || '',
       escalation_type: data.escalation_type || 'unknown',
-      is_escalating: data.is_escalating || (data.escalation_type && data.escalation_type !== 'none' && data.escalation_type !== 'unknown' ? 'Yes' : 'No'), // Binary flag for percentage tracking
-      bot_type: data.bot_type || 'angel' // Track which bot was used for A/B testing
+      angel_devil_bot: (data.bot_type === 'devil' ? 'DevilBot' : 'AngelBot') // AngelBot/DevilBot for A/B testing
     };
     
     console.log('📝 Prepared log data:', logData);
@@ -128,35 +127,31 @@ async function handleDataLogging(data) {
 // Send data to Google Sheets
 async function sendToGoogleSheets(data) {
   try {
-    // Get Google Sheets URL from config
-    // Check if URL is configured
     if (!GOOGLE_SHEETS_URL || GOOGLE_SHEETS_URL.includes('YOUR_')) {
       console.warn('⚠️ Google Sheets URL not configured. Follow GOOGLE_SHEETS_SETUP.md to set it up.');
-      // Store locally as backup
       await storeLocally(data);
       return;
     }
     
-    console.log('📤 Sending data to Google Sheets...');
+    console.log('📤 Sending data to Google Sheets...', { user_id: data.user_id, did_user_accept: data.did_user_accept });
     
-    // Send to Google Sheets
     const response = await fetch(GOOGLE_SHEETS_URL, {
       method: 'POST',
-      mode: 'no-cors', // Required for Google Apps Script
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      mode: 'cors',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
     
-    console.log('✅ Data sent to Google Sheets successfully');
-    
-    // Also store locally as backup
+    if (response.ok) {
+      const result = await response.json().catch(() => ({}));
+      console.log('✅ Google Sheets logged:', result.message || 'success');
+    } else {
+      console.warn('⚠️ Google Sheets responded with status', response.status, '- storing locally');
+    }
     await storeLocally(data);
     
   } catch (error) {
-    console.error('❌ Error sending to Google Sheets:', error);
-    // Store locally as backup
+    console.error('❌ Google Sheets error:', error.message || error);
     await storeLocally(data);
   }
 }

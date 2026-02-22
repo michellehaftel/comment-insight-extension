@@ -1,31 +1,32 @@
 # Google Sheets Integration Setup
 
-This guide will help you set up automatic data logging to Google Sheets for research purposes.
+This guide helps you set up automatic data logging to Google Sheets for research.
 
-## Step 1: Create a Google Sheet
+---
 
-1. Go to [Google Sheets](https://sheets.google.com)
-2. Create a new spreadsheet
-3. Name it "Discourse Lab Research Data"
-4. Set up the following column headers in row 1:
+## Copy-paste setup (use this first)
 
-| User ID | Date | Gender | Age | Sector | Country | City | Original Post Content | Original Post Writer | User's Original Content | Rephrase Suggestion | Did User Accept | actual_posted_text | Delta | Platform | Context | Escalation Type | is_escalating | bot_type |
-|---------|------|--------|-----|--------|---------|------|----------------------|---------------------|------------------------|-------------------|-----------------|-------------------|-------|----------|---------|----------------|---------------|----------|
+### 1. Column headers (paste into Row 1 of your sheet)
 
-## Step 2: Create Google Apps Script
+Copy the line below and paste it into the first cell (A1) of your Google Sheet. If your sheet uses one cell per column, paste the first value in A1, second in B1, etc., or paste into row 1 and use "Split text to columns" (Data → Split text to columns) with comma as separator.
 
-**🎯 EASIEST WAY**: Copy the entire ready-to-use script from `GOOGLE_APPS_SCRIPT_CODE.js` file in this repo!
+```
+User ID	Date	Gender	Age	Sector	Country	City	Original Post Content	Original Post Writer	User's Original Content	Rephrase Suggestion	Did User Accept	actual_posted_text	Delta	Platform	Context	Escalation Type	AngelBot/DevilBot
+```
 
-1. In your Google Sheet, click **Extensions** → **Apps Script**
-2. Delete any existing code
-3. **Copy and paste the ENTIRE code** from `GOOGLE_APPS_SCRIPT_CODE.js` OR paste the following code:
+### 2. Apps Script (paste into Extensions → Apps Script)
+
+1. In your Google Sheet: **Extensions** → **Apps Script**
+2. Delete any existing code in the editor
+3. Paste the entire script below
+4. Save (💾), then **Deploy** → **New deployment** → type **Web app** → Execute as **Me**, Who has access **Anyone** → Deploy
+5. Copy the Web app URL and put it in `config.js` as `GOOGLE_SHEETS_URL`
 
 ```javascript
 function doPost(e) {
   try {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
     const data = JSON.parse(e.postData.contents);
-    
     sheet.appendRow([
       data.user_id || '',
       data.date || new Date().toISOString(),
@@ -40,53 +41,43 @@ function doPost(e) {
       data.rephrase_suggestion || '',
       data.did_user_accept || '',
       data.actual_posted_text || '',
+      data.delta || '',
       data.platform || '',
       data.context || '',
-      data.escalation_type || ''
+      data.escalation_type || '',
+      data.angel_devil_bot || 'AngelBot'
     ]);
-    
     return ContentService
       .createTextOutput(JSON.stringify({ success: true, message: 'Data logged successfully' }))
       .setMimeType(ContentService.MimeType.JSON);
-      
   } catch (error) {
     return ContentService
       .createTextOutput(JSON.stringify({ success: false, error: error.toString() }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 }
-
-// Test function (optional)
-function testPost() {
-  const testData = {
-    user_id: 'test_user_123',
-    date: new Date().toISOString(),
-    gender: 'female',
-    age: 25,
-    original_post_content: 'This is a test post',
-    original_post_writer: '@testuser',
-    user_original_text: 'You are always wrong!',
-    rephrase_suggestion: 'I often disagree with your perspective.',
-    did_user_accept: 'yes',
-    actual_posted_text: 'I often disagree with your perspective.',
-    platform: 'twitter',
-    context: 'https://twitter.com',
-    escalation_type: 'cognitive'
-  };
-  
-  const e = {
-    postData: {
-      contents: JSON.stringify(testData)
-    }
-  };
-  
-  const result = doPost(e);
-  Logger.log(result.getContent());
-}
 ```
 
-4. Click **Save** (💾 icon)
-5. Name your project "Discourse Lab Data Logger"
+---
+
+## Step 1: Create a Google Sheet
+
+1. Go to [Google Sheets](https://sheets.google.com)
+2. Create a new spreadsheet
+3. Name it "Discourse Lab Research Data"
+4. Set up the column headers in row 1 (use the **Copy-paste setup** section above)
+
+| User ID | Date | Gender | Age | Sector | Country | City | Original Post Content | Original Post Writer | User's Original Content | Rephrase Suggestion | Did User Accept | actual_posted_text | Delta | Platform | Context | Escalation Type | AngelBot/DevilBot |
+|---------|------|--------|-----|--------|---------|------|----------------------|---------------------|------------------------|-------------------|-----------------|-------------------|-------|----------|---------|----------------|-------------------|
+
+## Step 2: Create Google Apps Script
+
+**🎯 Easiest:** Use the **Copy-paste setup** block at the top of this doc (same script, 18 columns).
+
+1. In your Google Sheet, click **Extensions** → **Apps Script**
+2. Delete any existing code and paste the script from the **Copy-paste setup** section above
+3. Click **Save** (💾 icon)
+4. Name your project "Discourse Lab Data Logger"
 
 ## Step 3: Deploy as Web App
 
@@ -106,7 +97,7 @@ function testPost() {
 
 ## Step 4: Add URL to Extension
 
-1. Open `/Users/ido/git_michal/comment-insight-extension/config.js`
+1. Open `config.js` in your extension project
 2. Add your Web App URL:
 
 ```javascript
@@ -183,8 +174,7 @@ async function sendToGoogleSheets(data) {
 | 15 | Platform |
 | 16 | Context |
 | 17 | Escalation Type |
-| 18 | **is_escalating** |
-| 19 | **bot_type** |
+| 18 | **AngelBot/DevilBot** |
 
 **If columns are out of order, data will appear in the wrong places!**
 
@@ -231,72 +221,20 @@ async function sendToGoogleSheets(data) {
 
 ### Wrong data appearing in columns (e.g., "twitter" in actual_posted_text column)?
 
-This means your Google Apps Script `appendRow` array has **12 items instead of 13**, so all data after `did_user_accept` is shifted by one position.
+This usually means the `appendRow` array has the wrong number of items or order. Use the **Copy-paste setup** script at the top of this doc (it has exactly 18 columns in the correct order).
 
-**Critical Fix Steps:**
+**Quick fix:**
 
-1. **Open Google Apps Script:**
-   - Go to your Google Sheet → Extensions → Apps Script
-
-2. **Count the items in `appendRow` array:**
-   - The array should have **exactly 13 items** (one for each column)
-   - If it has only 12 items, you're missing `data.actual_posted_text || ''`
-
-3. **Copy this EXACT code** - Replace your entire `doPost` function:
-   ```javascript
-   function doPost(e) {
-     try {
-       const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-       const data = JSON.parse(e.postData.contents);
-       
-       sheet.appendRow([
-         data.user_id || '',                    // Column 1
-         data.date || new Date().toISOString(), // Column 2
-         data.gender || '',                     // Column 3
-         data.age || '',                        // Column 4
-         data.sector || '',                     // Column 5
-         data.country || '',                    // Column 6
-         data.city || '',                       // Column 7
-         data.original_post_content || '',      // Column 8
-         data.original_post_writer || '',       // Column 9
-         data.user_original_text || '',         // Column 10
-         data.rephrase_suggestion || '',        // Column 11
-         data.did_user_accept || '',            // Column 12
-         data.actual_posted_text || '',         // Column 13
-         data.platform || '',                   // Column 14
-         data.context || '',                    // Column 15
-         data.escalation_type || ''             // Column 16
-       ]);
-       
-       return ContentService
-         .createTextOutput(JSON.stringify({ success: true, message: 'Data logged successfully' }))
-         .setMimeType(ContentService.MimeType.JSON);
-         
-     } catch (error) {
-       return ContentService
-         .createTextOutput(JSON.stringify({ success: false, error: error.toString() }))
-         .setMimeType(ContentService.MimeType.JSON);
-     }
-   }
-   ```
-   
-4. **VERIFY BEFORE SAVING** - Check your code matches EXACTLY:
-   - Line after `data.did_user_accept || '',` must be: `data.actual_posted_text || '',`
-   - **Next line MUST be**: `data.platform || '',` (NOT escalation_type!)
-   - **Next line MUST be**: `data.context || '',` (NOT platform!)
-   - **Last line MUST be**: `data.escalation_type || ''` (NOT context!)
-   - **Count commas in the array**: Should be exactly 12 commas (means 13 items)
-   - **❌ WRONG ORDER**: If you see `escalation_type` before `platform`, your order is wrong!
-   - **✅ CORRECT ORDER**: `actual_posted_text` → `platform` → `context` → `escalation_type`
-
-5. **Save and Redeploy:**
+1. Open your Google Sheet → **Extensions** → **Apps Script**
+2. Replace your `doPost` function with the script from the **Copy-paste setup** section above (Step 2)
+3. **Save and Redeploy:**
    - Click **Save** (💾) 
    - Click **Deploy** → **Manage deployments**
    - Click the **pencil icon ✏️** next to your deployment
    - Click **Deploy**
    - Wait 10-15 seconds for deployment to complete
 
-6. **Verify Google Sheet Column Order matches EXACTLY:**
+4. **Verify Google Sheet column order** (18 columns total):
    - Column A (1): `user_id`
    - Column B (2): `date`
    - Column C (3): `gender`
@@ -314,8 +252,7 @@ This means your Google Apps Script `appendRow` array has **12 items instead of 1
    - Column O (15): `platform`
    - Column P (16): `context`
    - Column Q (17): `escalation_type`
-   - Column R (18): `is_escalating`
-   - Column S (19): `bot_type` (A/B testing: "angel" = de-escalation bot, "devil" = escalation bot)
+   - Column R (18): **AngelBot/DevilBot** – "AngelBot" (de-escalation) or "DevilBot" (escalation) for A/B testing
    
    **Make sure your column order matches exactly!**
 
@@ -348,8 +285,7 @@ This means your Google Apps Script `appendRow` array has **12 items instead of 1
       platform: 'twitter',              // Should go to Column O
       context: 'https://x.com/test',    // Should go to Column P
       escalation_type: 'emotional',     // Should go to Column Q
-      is_escalating: 'Yes',              // Should go to Column R
-      bot_type: 'angel'                  // Should go to Column S
+      angel_devil_bot: 'AngelBot'       // Column R – AngelBot/DevilBot
      };
      
      const e = {
@@ -402,8 +338,7 @@ This means your Google Apps Script `appendRow` array has **12 items instead of 1
 - **Platform**: Site where interaction took place (Twitter, Facebook, etc.)
 - **Context**: URL of the page where the interaction happened
 - **Escalation Type**: Whether the user's **original text** (user_original_text) was cognitive, emotional, both, or other, regardless of what they eventually posted
-- **is_escalating**: Binary flag ("Yes" or "No") indicating if the user's **original text** (user_original_text) is escalatory, regardless of what they eventually posted. This enables easy calculation of the percentage of escalatory texts the user intended to write per user.
-- **bot_type**: A/B testing field indicating which bot was used: "angel" (de-escalation bot - suggests making toxic content calm) or "devil" (escalation bot - suggests making calm content more direct/impactful). Used to compare conversion rates between the two approaches.
+- **AngelBot/DevilBot**: A/B testing column. Values: "AngelBot" (de-escalation – suggests calmer rephrases) or "DevilBot" (escalation – suggests more direct/impactful rephrases). Used to compare conversion rates between the two approaches.
 
 ---
 

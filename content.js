@@ -7,6 +7,9 @@
  * 2. Emotional: Blame (projecting negative emotions) vs Self-accountability
  */
 
+// Log when content script loads - if you don't see this after editing, RELOAD the extension (chrome://extensions → ↻)
+console.log('🔬 Discourse Lab content script loaded');
+
 // ===== DATA LOGGING FUNCTIONS =====
 
 /**
@@ -144,6 +147,10 @@ function detectPlatformName() {
  */
 async function getBotAssignment() {
   try {
+    // Guard: chrome.storage may be undefined if extension context was invalidated
+    if (!chrome?.storage?.local) {
+      return 'angel';
+    }
     const result = await chrome.storage.local.get(['userId', 'botType']);
     const { userId, botType } = result;
     
@@ -175,8 +182,15 @@ async function getBotAssignment() {
     console.log(`🤖 Bot assignment: ${randomBot} (random fallback - no userId yet)`);
     return randomBot;
   } catch (error) {
-    console.error('❌ Error getting bot assignment:', error);
-    // Default to angel bot on error
+    const isInvalidated = error?.message?.includes('Extension context invalidated');
+    if (isInvalidated) {
+      // Content script was reloaded or extension updated; storage is no longer available. Default to angel.
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn('⚠️ Extension context invalidated – using Angel bot. Reload the page if the extension was updated.');
+      }
+    } else {
+      console.error('❌ Error getting bot assignment:', error);
+    }
     return 'angel';
   }
 }
@@ -229,8 +243,12 @@ function setupPostButtonMonitoring() {
     if (isPostButton) {
       console.log('📮 Post button clicked! Capturing final text...');
       
-      // Find the active textarea/composer
-      const composer = document.querySelector('[data-testid="tweetTextarea_0"]');
+      // Find the active textarea/composer (multiple selectors for Twitter/X DOM changes)
+      const composer = document.querySelector('[data-testid="tweetTextarea_0"]') ||
+                      document.querySelector('[data-testid*="tweetTextarea"]') ||
+                      document.querySelector('div[contenteditable="true"][role="textbox"]') ||
+                      document.querySelector('div[contenteditable="true"][data-lexical-editor]') ||
+                      document.querySelector('[role="textbox"][contenteditable="true"]');
       if (composer) {
         const finalText = getTextContent(composer);
         console.log('📝 Final posted text:', finalText);
@@ -303,8 +321,8 @@ async function logInteraction(data) {
       botType = await getBotAssignment();
     }
     
-    // Store for potential update when post button is clicked (only if not already containing actualPostedText)
-    if (!data.actualPostedText) {
+    // Store for potential update when post button is clicked (only for Rephrase accepted - not for Dismiss)
+    if (data.didUserAccept === 'yes' && !data.actualPostedText) {
       lastLoggedInteraction = {
         usersOriginalContent: data.usersOriginalContent || '',
         rephraseSuggestion: data.rephraseSuggestion || '',
@@ -328,19 +346,6 @@ async function logInteraction(data) {
       ? postContext.originalPostWriter 
       : 'new';
     
-    // Determine isEscalating binary flag
-    // This should be based on user_original_text (data.usersOriginalContent), not actual_posted_text
-    // If isEscalating is already set, use it; otherwise, check the original text
-    let isEscalatingValue;
-    if (data.isEscalating !== undefined) {
-      isEscalatingValue = data.isEscalating ? 'Yes' : 'No';
-    } else {
-      // Fallback: check the original text to determine escalation
-      const originalText = data.usersOriginalContent || '';
-      const escalationResult = isEscalating(originalText);
-      isEscalatingValue = escalationResult.isEscalatory ? 'Yes' : 'No';
-    }
-    
     const logData = {
       date: new Date().toISOString(),
       original_post_content: originalPostContent,
@@ -348,10 +353,9 @@ async function logInteraction(data) {
       user_original_text: data.usersOriginalContent || '',
       rephrase_suggestion: data.rephraseSuggestion || '',
       did_user_accept: data.didUserAccept || 'no',
-      actual_posted_text: data.actualPostedText || '', // NEW FIELD
+      actual_posted_text: data.actualPostedText || '',
       escalation_type: data.escalationType || 'unknown',
-      is_escalating: isEscalatingValue, // Binary flag: "Yes" or "No" for percentage tracking
-      bot_type: botType || 'angel', // Track which bot was used for A/B testing
+      bot_type: botType || 'angel',
       platform: detectPlatformName(),
       context: window.location.href,
       post_type: postContext.isReply ? 'reply' : 'new_post'
@@ -1016,18 +1020,24 @@ function isEscalating(text) {
 
   // ===== NON-VERBAL CUES =====
   
-  // 1. Multiple exclamation marks (escalating energy)
+  // 1. Exclamation marks (escalating energy) - even single ! can signal anger
   const exclamationCount = (trimmedText.match(/!/g) || []).length;
   if (exclamationCount >= 2) {
     escalationScore += 1;
     reasons.push("Multiple exclamation marks");
+  } else if (exclamationCount === 1 && trimmedText.length < 80) {
+    escalationScore += 0.5; // Single ! in short text can signal emphasis/anger
+    reasons.push("Exclamation (potential emphasis/anger)");
   }
 
-  // 2. ALL CAPS (shouting)
-  const capsRatio = (trimmedText.match(/[A-Z]/g) || []).length / trimmedText.length;
-  if (capsRatio > 0.3 && trimmedText.length > 20) {
+  // 2. ALL CAPS (shouting) - lower threshold to catch more
+  const capsRatio = trimmedText.length > 0 ? (trimmedText.match(/[A-Z]/g) || []).length / trimmedText.length : 0;
+  if (capsRatio > 0.25 && trimmedText.length > 15) {
     escalationScore += 1.5;
     reasons.push("Excessive capitalization");
+  } else if (capsRatio > 0.15 && trimmedText.length > 30) {
+    escalationScore += 0.5; // Moderate caps
+    reasons.push("Capitalization emphasis");
   }
 
   // 3. Multiple question marks (aggressive questioning)
@@ -1035,6 +1045,22 @@ function isEscalating(text) {
   if (questionCount >= 3) {
     escalationScore += 1;
     reasons.push("Multiple aggressive questions");
+  } else if (questionCount >= 1 && questionCount <= 2 && trimmedText.length < 100) {
+    escalationScore += 0.5; // Single/double ? in short text
+    reasons.push("Questioning tone");
+  }
+
+  // 4. Emojis that signal anger/frustration
+  const angerEmojis = /[\u{1F92C}\u{1F92F}\u{1F621}\u{1F620}\u{1F624}\u{1F63E}\u{1F47F}\u{1F4A2}\u{1F4A9}\u{1F5FF}\u{2639}\u{26A0}\u{274C}\u{2705}\u{1F44E}\u{1F44B}]/u; // 😤🤯😡😠😤😾👿💢💩🙏☹⚠❌✅👎👋
+  if (angerEmojis.test(trimmedText)) {
+    escalationScore += 1;
+    reasons.push("Anger/frustration emoji");
+  }
+
+  // 5. Cynical/sarcastic tone markers (not already in mocking)
+  if (/\b(as if|yeah right)\b/i.test(trimmedText)) {
+    escalationScore += 1;
+    reasons.push("Cynical/sarcastic tone");
   }
 
   // ===== COMBINATION FACTORS =====
@@ -1052,9 +1078,9 @@ function isEscalating(text) {
     escalationScore += 1; // Bonus for combination
   }
 
-  // Threshold: Score of 2.5 or higher indicates escalation
-  // Cursing is BASIC: any profanity (except positive context) always = escalation
-  const isEscalatory = escalationScore >= 2.5 || hasAnyProfanity;
+  // Threshold: LOWER (2.0) - when uncertain, prefer showing tooltip. Better to over-detect than miss escalation.
+  // Cursing/insults are BASIC: always = escalation
+  const isEscalatory = escalationScore >= 2.0 || hasAnyProfanity;
   let escalationType = 'none';
   
   if (isEscalatory) {
@@ -1078,7 +1104,7 @@ function isEscalating(text) {
         escalationType
       });
     } else {
-      console.log(`✓ No escalation (score: ${escalationScore.toFixed(1)} < 2.5)`, {
+      console.log(`✓ No escalation (score: ${escalationScore.toFixed(1)} < 2.0)`, {
         text: trimmedText.substring(0, 50),
         reasons: reasons.length > 0 ? reasons : ['none']
       });
@@ -1263,7 +1289,8 @@ async function rephraseViaAPI(text, context = null, botType = 'angel') {
       context: {
         originalPostContent: context.originalPostContent || '',
         originalPostWriter: context.originalPostWriter || '',
-        isReply: context.isReply || false
+        isReply: context.isReply || false,
+        pageUrl: typeof window !== 'undefined' ? window.location.href : ''
       },
       model: API_CONFIG.model || 'gpt-4o',
       temperature: API_CONFIG.temperature || 1.0,
@@ -2452,16 +2479,16 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   
   // Different UI text based on bot type
   const uiText = botType === 'devil' ? {
-    warning: "Let me offer you a rephrase that fits better",
+    warning: "Let me offer you a rephrase",
     suggestLabel: "Suggested rephrase",
     dismiss: "Dismiss",
-    rephrase: "Accept rephrase",
+    rephrase: "Rephrase",
     generating: "⏳ Generating suggestion..."
   } : {
-    warning: "Let me offer you a rephrase that fits better",
+    warning: "Let me offer you a rephrase",
     suggestLabel: "Suggested rephrase",
     dismiss: "Dismiss",
-    rephrase: "Accept rephrase",
+    rephrase: "Rephrase",
     generating: "⏳ Generating rephrasing suggestion..."
   };
 
@@ -2701,27 +2728,29 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   // This must be done before the async rephrasing starts
   const dismissBtn = tooltip.querySelector("#dismissBtn");
   if (dismissBtn) {
-    dismissBtn.addEventListener('click', (e) => {
+      dismissBtn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
       console.log("🚫 Dismiss button clicked - closing tooltip");
       
-      // Store interaction data for logging when post button is clicked (don't log now)
-      lastLoggedInteraction = {
+      const interactionData = {
         usersOriginalContent: originalText,
-        rephraseSuggestion: (rephrasedText && typeof rephrasedText === 'string') ? rephrasedText : '', // May be empty if dismissed during loading or error
+        rephraseSuggestion: (rephrasedText && typeof rephrasedText === 'string') ? rephrasedText : '',
         didUserAccept: 'no',
+        actualPostedText: '', // User dismissed, no post
         escalationType,
-        isEscalating: escalationType !== 'none' && escalationType !== 'unknown', // Binary flag for percentage tracking
-        botType: botType || 'angel' // Track which bot was used for A/B testing
+        isEscalating: escalationType !== 'none' && escalationType !== 'unknown',
+        botType: botType || 'angel'
       };
-      console.log("💾 Stored interaction data (will log when post button is clicked):", lastLoggedInteraction);
+      lastLoggedInteraction = null; // Clear so future post logs as new interaction
+      logInteraction(interactionData);
+      console.log("💾 Logged dismiss to Google Sheets");
       
       // Clean up position handlers and remove tooltip
       if (tooltip && tooltip.parentNode) {
         tooltip.remove();
       }
-    }, { once: false }); // Allow multiple clicks in case first one doesn't work
+    }, { once: false });
   } else {
     console.error("❌ Dismiss button not found in tooltip!");
   }
@@ -3130,11 +3159,22 @@ async function createEscalationTooltip(originalText, element, escalationType = '
           justRephrased = false; // Reset flag if replacement failed
         }
         
-        // Reset flag after 2 seconds to allow future checks (only if replacement succeeded)
+        // Reset flag after 2 seconds and RE-CHECK the text (maybe rephrased text is still escalatory)
         if (wasReplaced) {
           rephraseTimeout = setTimeout(() => {
             justRephrased = false;
-            console.log("🔄 Re-enabled escalation detection");
+            console.log("🔄 Re-enabled escalation detection, re-checking current text...");
+            // Find current composer (may have changed if platform re-rendered)
+            let elToCheck = elementToRephrase?.isConnected ? elementToRephrase : null;
+            if (!elToCheck) {
+              elToCheck = document.querySelector('[data-testid="tweetTextarea_0"]') ||
+                         document.querySelector('[contenteditable="true"][role="textbox"]') ||
+                         document.querySelector('textarea');
+            }
+            if (elToCheck) {
+              attachListeners(elToCheck);
+              checkForEscalation(elToCheck);
+            }
           }, 2000);
         }
       }, 100); // Reduced timeout for faster response
