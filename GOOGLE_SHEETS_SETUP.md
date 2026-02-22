@@ -11,7 +11,7 @@ This guide helps you set up automatic data logging to Google Sheets for research
 Copy the line below and paste it into the first cell (A1) of your Google Sheet. If your sheet uses one cell per column, paste the first value in A1, second in B1, etc., or paste into row 1 and use "Split text to columns" (Data → Split text to columns) with comma as separator.
 
 ```
-User ID	Date	Gender	Age	Sector	Country	City	Original Post Content	Original Post Writer	User's Original Content	Rephrase Suggestion	Did User Accept	actual_posted_text	Delta	Platform	Context	Escalation Type	AngelBot/DevilBot
+User ID	Date	Gender	Age	Sector	Country	City	Original Post Content	Original Post Writer	User's Original Content	Rephrase Suggestion	Did User Accept	actual_posted_text	Delta	Platform	Context	Escalation Type	AngelBot/DevilBot	interaction_id
 ```
 
 ### 2. Apps Script (paste into Extensions → Apps Script)
@@ -61,7 +61,7 @@ function doPost(e) {
 3. Name it "Discourse Lab Research Data"
 4. Set up the column headers in row 1 (use the **Copy-paste setup** section above)
 
-| User ID | Date | Gender | Age | Sector | Country | City | Original Post Content | Original Post Writer | User's Original Content | Rephrase Suggestion | Did User Accept | actual_posted_text | Delta | Platform | Context | Escalation Type | AngelBot/DevilBot |
+| User ID | Date | Gender | Age | Sector | Country | City | Original Post Content | Original Post Writer | User's Original Content | Rephrase Suggestion | Did User Accept | actual_posted_text | Delta | Platform | Context | Escalation Type | AngelBot/DevilBot | interaction_id |
 |---------|------|--------|-----|--------|---------|------|----------------------|---------------------|------------------------|-------------------|-----------------|-------------------|-------|----------|---------|----------------|-------------------|
 
 ## Step 2: Create Google Apps Script
@@ -169,6 +169,7 @@ async function sendToGoogleSheets(data) {
 | 16 | Context |
 | 17 | Escalation Type |
 | 18 | **AngelBot/DevilBot** |
+| 19 | **interaction_id** |
 
 **If columns are out of order, data will appear in the wrong places!**
 
@@ -215,7 +216,7 @@ async function sendToGoogleSheets(data) {
 
 ### Wrong data appearing in columns (e.g., "twitter" in actual_posted_text column)?
 
-This usually means the `appendRow` array has the wrong number of items or order. Use the **Copy-paste setup** script at the top of this doc (it has exactly 18 columns in the correct order).
+This usually means the `appendRow` array has the wrong number of items or order. Use the **Copy-paste setup** script at the top of this doc (it has exactly 19 columns in the correct order).
 
 **Quick fix:**
 
@@ -228,7 +229,7 @@ This usually means the `appendRow` array has the wrong number of items or order.
    - Click **Deploy**
    - Wait 10-15 seconds for deployment to complete
 
-4. **Verify Google Sheet column order** (18 columns total):
+4. **Verify Google Sheet column order** (19 columns total):
    - Column A (1): `user_id`
    - Column B (2): `date`
    - Column C (3): `gender`
@@ -247,6 +248,7 @@ This usually means the `appendRow` array has the wrong number of items or order.
    - Column P (16): `context`
    - Column Q (17): `escalation_type`
    - Column R (18): **AngelBot/DevilBot** – "AngelBot" (de-escalation) or "DevilBot" (escalation) for A/B testing
+   - Column S (19): **interaction_id** – internal link ID so we can update this row when the user clicks Post or Dismiss. You can ignore it when analysing data.
    
    **Make sure your column order matches exactly!**
 
@@ -333,6 +335,7 @@ This usually means the `appendRow` array has the wrong number of items or order.
 - **Context**: URL of the page where the interaction happened
 - **Escalation Type**: Whether the user's **original text** (user_original_text) was cognitive, emotional, both, or other, regardless of what they eventually posted
 - **AngelBot/DevilBot**: A/B testing column. Values: "AngelBot" (de-escalation – suggests calmer rephrases) or "DevilBot" (escalation – suggests more direct/impactful rephrases). Used to compare conversion rates between the two approaches.
+- **interaction_id**: A unique ID for that row. The extension uses it only to find the same row later and fill in "Did User Accept" and "actual_posted_text" when the user clicks Post or Dismiss. You can ignore this column when analysing your data.
 
 ---
 

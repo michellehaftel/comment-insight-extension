@@ -321,23 +321,27 @@ async function logInteraction(data) {
       botType = await getBotAssignment();
     }
     
-    // Store for potential update when post button is clicked (only for Rephrase accepted - not for Dismiss)
-    if (data.didUserAccept === 'yes' && !data.actualPostedText) {
-      lastLoggedInteraction = {
-        usersOriginalContent: data.usersOriginalContent || '',
-        rephraseSuggestion: data.rephraseSuggestion || '',
-        didUserAccept: data.didUserAccept || 'no',
-        escalationType: data.escalationType || 'unknown',
-        isEscalating: data.isEscalating !== undefined ? data.isEscalating : (data.escalationType !== 'none' && data.escalationType !== 'unknown')
+    // When outcome is known (yes/no) and we have an interactionId, we send an update to the existing row (no new row).
+    if (data.interactionId && data.didUserAccept !== 'pending') {
+      const logData = {
+        action: 'update',
+        interaction_id: data.interactionId,
+        did_user_accept: data.didUserAccept || 'no',
+        actual_posted_text: data.actualPostedText || '',
+        rephrase_suggestion: data.rephraseSuggestion || ''
       };
-      
-      // Try to find and store the element reference
-      const composer = document.querySelector('[data-testid="tweetTextarea_0"]');
-      if (composer) {
-        pendingInteractionElement = composer;
+      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+        chrome.runtime.sendMessage({ type: 'LOG_INTERACTION', data: logData }, (response) => {
+          if (chrome.runtime.lastError && !chrome.runtime.lastError.message.includes('Extension context invalidated')) {
+            console.error('❌ Error sending update:', chrome.runtime.lastError.message);
+          } else if (response?.success) {
+            console.log('✅ Row updated in Google Sheets');
+          }
+        });
+        return;
       }
     }
-    
+
     // Handle new posts vs replies
     const originalPostContent = postContext.isReply 
       ? postContext.originalPostContent 
@@ -358,7 +362,8 @@ async function logInteraction(data) {
       bot_type: botType || 'angel',
       platform: detectPlatformName(),
       context: window.location.href,
-      post_type: postContext.isReply ? 'reply' : 'new_post'
+      post_type: postContext.isReply ? 'reply' : 'new_post',
+      interaction_id: data.interactionId || ''
     };
     
     console.log('📊 Logging interaction:', logData);
@@ -1125,34 +1130,40 @@ function isTwitter() {
 }
 
 function getTextContent(element) {
-  // More robust text extraction for contenteditable elements
-  // Handles nested elements, br tags, and other HTML structures
   if (!element) return "";
-  
-  // For textareas, use value
+
   if (element.tagName === 'TEXTAREA') {
     return (element.value || "").trim();
   }
-  
-  // Try innerText first (handles formatting better)
-  let text = element.innerText || element.textContent || "";
-  
-  // Fallback: manually extract text if needed
-  if (!text || text.trim().length === 0) {
-    text = element.textContent || "";
+
+  // For contenteditable / Lexical-style editors: get ALL text from the full subtree
+  // so we never log only a fragment (e.g. "Those lefties" instead of the full sentence)
+  const getFullText = (el) => {
+    if (!el) return "";
+    let out = "";
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
+    let node;
+    while ((node = walker.nextNode())) {
+      out += node.textContent || "";
+    }
+    return out;
+  };
+
+  let text = getFullText(element);
+  if (text.trim().length === 0) {
+    text = element.innerText || element.textContent || "";
   }
-  
-  // For Facebook's lexical editor, might need to check nested spans
   if (text.trim().length === 0 && element.querySelector) {
-    const spans = element.querySelectorAll('span[data-text="true"]');
+    const spans = element.querySelectorAll('span[data-text="true"], span[data-lexical-text="true"]');
     if (spans.length > 0) {
-      text = Array.from(spans).map(s => s.textContent).join(' ');
+      text = Array.from(spans).map(s => s.textContent).join("");
     }
   }
-  
-  // Replace multiple whitespace/newlines with single space
+  if (text.trim().length === 0) {
+    text = element.textContent || "";
+  }
+
   text = text.replace(/\s+/g, " ").trim();
-  
   return text;
 }
 
@@ -1185,6 +1196,8 @@ let currentElementBeingChecked = null;
 // Flag to prevent tooltip from showing immediately after rephrasing
 let justRephrased = false;
 let rephraseTimeout = null;
+// After user clicks Rephrase or Dismiss: don't show another tooltip until they EDIT the content (Angel & Devil)
+let lastContentWhenUserMadeChoice = null;
 
 async function checkForEscalation(element) {
   const text = getTextContent(element);
@@ -1192,8 +1205,18 @@ async function checkForEscalation(element) {
   console.log("🔍 checkForEscalation called - text length:", text?.length || 0);
   
   if (!text || text.trim().length === 0) {
+    lastContentWhenUserMadeChoice = null; // Allow tooltip again when they type something new
     console.log("⚠️ No text to check (empty)");
     return; // Don't check empty text
+  }
+  
+  // Don't show a second tooltip until the user has edited the content (represents "refresh")
+  if (lastContentWhenUserMadeChoice != null) {
+    if (text.trim() === lastContentWhenUserMadeChoice.trim()) {
+      console.log("⚠️ Skipping check - same content as when user chose Rephrase/Dismiss (edit to get new suggestion)");
+      return;
+    }
+    lastContentWhenUserMadeChoice = null; // They edited; allow new tooltip
   }
   
   // Skip check if we just rephrased (give it a moment)
@@ -2733,18 +2756,21 @@ async function createEscalationTooltip(originalText, element, escalationType = '
       e.stopPropagation();
       console.log("🚫 Dismiss button clicked - closing tooltip");
       
+      // On Dismiss: they kept their original text (did not accept rephrase)
       const interactionData = {
         usersOriginalContent: originalText,
         rephraseSuggestion: (rephrasedText && typeof rephrasedText === 'string') ? rephrasedText : '',
         didUserAccept: 'no',
-        actualPostedText: '', // User dismissed, no post
+        actualPostedText: originalText, // Same as original – they dismissed the rephrase
         escalationType,
         isEscalating: escalationType !== 'none' && escalationType !== 'unknown',
-        botType: botType || 'angel'
+        botType: botType || 'angel',
+        interactionId: lastLoggedInteraction?.interactionId || null
       };
-      lastLoggedInteraction = null; // Clear so future post logs as new interaction
+      lastLoggedInteraction = null;
       logInteraction(interactionData);
-      console.log("💾 Logged dismiss to Google Sheets");
+      console.log("💾 Updated row with dismiss in Google Sheets");
+      lastContentWhenUserMadeChoice = originalText; // No second tooltip until user edits
       
       // Clean up position handlers and remove tooltip
       if (tooltip && tooltip.parentNode) {
@@ -2866,6 +2892,42 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     buttonInDOM: rephraseBtn ? rephraseBtn.isConnected : false
   });
 
+  // Log at most ONE pending row per post: if we already have an outstanding pending row, reuse it (no new sheet row).
+  const rephraseForLog = (rephrasedText && typeof rephrasedText === 'string') ? rephrasedText : '';
+  const alreadyHavePending = lastLoggedInteraction?.interactionId != null;
+
+  if (alreadyHavePending) {
+    // Same composer session – just update in-memory state; do NOT append another row
+    lastLoggedInteraction = {
+      ...lastLoggedInteraction,
+      usersOriginalContent: originalText,
+      rephraseSuggestion: rephraseForLog,
+      escalationType,
+      isEscalating: escalationType !== 'none' && escalationType !== 'unknown',
+      botType: botType || 'angel'
+    };
+  } else {
+    const interactionId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : (`${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    lastLoggedInteraction = {
+      interactionId,
+      usersOriginalContent: originalText,
+      rephraseSuggestion: rephraseForLog,
+      escalationType,
+      isEscalating: escalationType !== 'none' && escalationType !== 'unknown',
+      botType: botType || 'angel'
+    };
+    logInteraction({
+      usersOriginalContent: originalText,
+      rephraseSuggestion: rephraseForLog,
+      didUserAccept: 'pending',
+      actualPostedText: '',
+      escalationType,
+      isEscalating: escalationType !== 'none' && escalationType !== 'unknown',
+      botType: botType || 'angel',
+      interactionId
+    });
+  }
+
   // Add event listener for rephrase button (dismiss button already handled above)
   // Use tooltip.querySelector instead of document.getElementById to ensure we get the button from THIS tooltip
   const rephraseBtnElement = tooltip.querySelector("#rephraseBtn");
@@ -2888,6 +2950,7 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     // If this is "Rephrase on my own" case (error occurred), just dismiss and let user edit
     if (isManualRephraseCase) {
       console.log("🔄 User will rephrase on their own - dismissing tooltip");
+      lastContentWhenUserMadeChoice = originalText.trim(); // No second tooltip until user edits
       tooltip.remove();
       // Focus the input so user can edit
       const elementToFocus = targetElement || currentElementBeingChecked;
@@ -3020,17 +3083,16 @@ async function createEscalationTooltip(originalText, element, escalationType = '
         
         if (wasReplaced) {
           console.log("✅ Text successfully rephrased! New text:", verifyText);
-          
-          // Store interaction data for logging when post button is clicked (don't log now)
-          lastLoggedInteraction = {
-            usersOriginalContent: originalText,
-            rephraseSuggestion: rephrasedText,
+          lastLoggedInteraction = { ...lastLoggedInteraction, didUserAccept: 'yes' };
+          lastContentWhenUserMadeChoice = (verifyText || rephrasedText || '').trim(); // No second tooltip until user edits
+          // Update sheet immediately: "Did User Accept" → Accepted (don't wait for Post)
+          logInteraction({
+            interactionId: lastLoggedInteraction.interactionId,
             didUserAccept: 'yes',
-            escalationType,
-            isEscalating: escalationType !== 'none' && escalationType !== 'unknown', // Binary flag for percentage tracking
-            botType: botType || 'angel' // Track which bot was used for A/B testing
-          };
-          console.log("💾 Stored interaction data (will log when post button is clicked):", lastLoggedInteraction);
+            actualPostedText: verifyText || rephrasedText || '',
+            rephraseSuggestion: lastLoggedInteraction.rephraseSuggestion || rephrasedText || ''
+          });
+          console.log("💾 Row updated to Accepted in Google Sheets (will update actual_posted_text when they click Post)");
           
           // Show success tooltip
           console.log("🎉 Calling showSuccessTooltip with element:", elementToRephrase);

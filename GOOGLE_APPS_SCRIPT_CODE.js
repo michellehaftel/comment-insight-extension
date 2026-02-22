@@ -27,6 +27,7 @@
  * P: context
  * Q: escalation_type
  * R: AngelBot/DevilBot
+ * S: interaction_id – internal ID linking the "pending" row to the later update (Post/Dismiss). Safe to ignore when analysing data.
  */
 
 // CORS headers so the Chrome extension (or any origin) can POST to this Web App
@@ -51,7 +52,49 @@ function doPost(e) {
   try {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
     const data = JSON.parse(e.postData.contents);
-    
+
+    // Update existing row by interaction_id (when user clicks Post or Dismiss)
+    if (data.action === 'update' && data.interaction_id) {
+      const id = String(data.interaction_id).trim();
+      if (!id) {
+        return ContentService
+          .createTextOutput(JSON.stringify({ success: false, error: 'Missing interaction_id' }))
+          .setMimeType(ContentService.MimeType.JSON)
+          .setHeaders(cors);
+      }
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) {
+        return ContentService
+          .createTextOutput(JSON.stringify({ success: false, error: 'No data rows in sheet' }))
+          .setMimeType(ContentService.MimeType.JSON)
+          .setHeaders(cors);
+      }
+      const idCol = 19; // Column S = interaction_id
+      const dataRange = sheet.getRange(2, idCol, lastRow, idCol); // Row 2 = first data row (row 1 is header)
+      const values = dataRange.getValues();
+      let rowIndex = -1;
+      for (let i = 0; i < values.length; i++) {
+        if (String(values[i][0] || '').trim() === id) {
+          rowIndex = i + 2; // +2 because data starts at row 2
+          break;
+        }
+      }
+      if (rowIndex === -1) {
+        return ContentService
+          .createTextOutput(JSON.stringify({ success: false, error: 'Row not found for interaction_id: ' + id }))
+          .setMimeType(ContentService.MimeType.JSON)
+          .setHeaders(cors);
+      }
+      sheet.getRange(rowIndex, 12).setValue(data.did_user_accept || '');
+      sheet.getRange(rowIndex, 13).setValue(data.actual_posted_text || '');
+      sheet.getRange(rowIndex, 14).setValue(data.delta || '');
+      return ContentService
+        .createTextOutput(JSON.stringify({ success: true, message: 'Row updated successfully' }))
+        .setMimeType(ContentService.MimeType.JSON)
+        .setHeaders(cors);
+    }
+
+    // Append new row (escalation detected – tooltip shown)
     sheet.appendRow([
       data.user_id || '',                    // Column A (1)
       data.date || new Date().toISOString(), // Column B (2)
@@ -70,14 +113,15 @@ function doPost(e) {
       data.platform || '',                   // Column O (15)
       data.context || '',                    // Column P (16)
       data.escalation_type || '',            // Column Q (17)
-      data.angel_devil_bot || 'AngelBot'     // Column R (18) - AngelBot/DevilBot for A/B testing
+      data.angel_devil_bot || 'AngelBot',    // Column R (18)
+      data.interaction_id || ''              // Column S (19)
     ]);
-    
+
     return ContentService
       .createTextOutput(JSON.stringify({ success: true, message: 'Data logged successfully' }))
       .setMimeType(ContentService.MimeType.JSON)
       .setHeaders(cors);
-      
+
   } catch (error) {
     return ContentService
       .createTextOutput(JSON.stringify({ success: false, error: error.toString() }))
@@ -104,12 +148,13 @@ function testDataOrder() {
     user_original_text: 'You are always wrong!',
     rephrase_suggestion: 'I often disagree with your perspective.',
     did_user_accept: 'yes',
-    actual_posted_text: 'I often disagree with your perspective.', // Should appear in Column M
-    delta: '',                                                    // Should appear in Column N
-    platform: 'twitter',                                          // Should appear in Column O
-    context: 'https://x.com/test',                                // Should appear in Column P
-    escalation_type: 'emotional',                                 // Column Q
-    angel_devil_bot: 'AngelBot'                                   // Column R - AngelBot/DevilBot
+    actual_posted_text: 'I often disagree with your perspective.',
+    delta: '',
+    platform: 'twitter',
+    context: 'https://x.com/test',
+    escalation_type: 'emotional',
+    angel_devil_bot: 'AngelBot',
+    interaction_id: 'test-' + Date.now()
   };
   
   const e = {

@@ -72,11 +72,36 @@ function calculateDelta(actualText, rephraseText) {
   return actual.replaceAll(rephrase, '').trim();
 }
 
+// Normalize did_user_accept for the sheet: clear "Accepted" / "Not accepted" / "Pending" / "Not applicable"
+function normalizeDidUserAccept(value) {
+  const v = String(value || '').trim().toLowerCase();
+  if (v === 'yes') return 'Accepted';
+  if (v === 'no') return 'Not accepted';
+  if (v === 'pending') return 'Pending';
+  if (v === 'not_applicable' || v === 'not applicable') return 'Not applicable';
+  return value || 'Pending';
+}
+
 async function handleDataLogging(data) {
   try {
     console.log('📊 Logging interaction data:', data);
-    
-    // Get user info from storage
+
+    // Update existing row (when user clicks Post or Dismiss)
+    if (data.action === 'update' && data.interaction_id) {
+      const delta = calculateDelta(data.actual_posted_text || '', data.rephrase_suggestion || '');
+      const updatePayload = {
+        action: 'update',
+        interaction_id: data.interaction_id,
+        did_user_accept: normalizeDidUserAccept(data.did_user_accept),
+        actual_posted_text: data.actual_posted_text || '',
+        delta: delta
+      };
+      console.log('📝 Sending update:', updatePayload);
+      await sendToGoogleSheets(updatePayload);
+      return;
+    }
+
+    // Get user info from storage (for new row append)
     const { userId, userGender, userAge, userSector, userCountry, userCountryName, userCity } = await chrome.storage.local.get([
       'userId',
       'userGender',
@@ -86,12 +111,9 @@ async function handleDataLogging(data) {
       'userCountryName',
       'userCity'
     ]);
-    
-    // Calculate delta between actual_posted_text and rephrase_suggestion
+
     const delta = calculateDelta(data.actual_posted_text || '', data.rephrase_suggestion || '');
-    
-    // Prepare data for Google Sheets
-    // NOTE: Column order matches Google Sheet
+
     const logData = {
       user_id: userId || 'unknown',
       date: data.date || new Date().toISOString(),
@@ -104,21 +126,19 @@ async function handleDataLogging(data) {
       original_post_writer: data.original_post_writer || '',
       user_original_text: data.user_original_text || '',
       rephrase_suggestion: data.rephrase_suggestion || '',
-      did_user_accept: data.did_user_accept || 'no',
+      did_user_accept: normalizeDidUserAccept(data.did_user_accept),
       actual_posted_text: data.actual_posted_text || '',
-      delta: delta, // NEW: Delta between actual_posted_text and rephrase_suggestion
+      delta: delta,
       platform: data.platform || 'unknown',
       context: data.context || '',
       escalation_type: data.escalation_type || 'unknown',
-      angel_devil_bot: (data.bot_type === 'devil' ? 'DevilBot' : 'AngelBot') // AngelBot/DevilBot for A/B testing
+      angel_devil_bot: (data.bot_type === 'devil' ? 'DevilBot' : 'AngelBot'),
+      interaction_id: data.interaction_id || ''
     };
-    
+
     console.log('📝 Prepared log data:', logData);
-    
-    // TODO: Send to Google Sheets
-    // Will implement in next step
     await sendToGoogleSheets(logData);
-    
+
   } catch (error) {
     console.error('❌ Error logging data:', error);
   }
