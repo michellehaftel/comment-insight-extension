@@ -22,38 +22,32 @@ User ID	Date	Gender	Age	Sector	Country	City	Original Post Content	Original Post 
 4. Save (💾), then **Deploy** → **New deployment** → type **Web app** → Execute as **Me**, Who has access **Anyone** → Deploy
 5. Copy the Web app URL and put it in `config.js` as `GOOGLE_SHEETS_URL`
 
+**Important:** Use the full script from `GOOGLE_APPS_SCRIPT_CODE.js` (it includes CORS headers so the extension can POST from the browser). Or paste this CORS-enabled version:
+
 ```javascript
+function getCorsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type'
+  };
+}
+function doGet(e) {
+  return ContentService.createTextOutput('').setMimeType(ContentService.MimeType.TEXT).setHeaders(getCorsHeaders());
+}
 function doPost(e) {
+  const cors = getCorsHeaders();
   try {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
     const data = JSON.parse(e.postData.contents);
     sheet.appendRow([
-      data.user_id || '',
-      data.date || new Date().toISOString(),
-      data.gender || '',
-      data.age || '',
-      data.sector || '',
-      data.country || '',
-      data.city || '',
-      data.original_post_content || '',
-      data.original_post_writer || '',
-      data.user_original_text || '',
-      data.rephrase_suggestion || '',
-      data.did_user_accept || '',
-      data.actual_posted_text || '',
-      data.delta || '',
-      data.platform || '',
-      data.context || '',
-      data.escalation_type || '',
-      data.angel_devil_bot || 'AngelBot'
+      data.user_id || '', data.date || new Date().toISOString(), data.gender || '', data.age || '', data.sector || '', data.country || '', data.city || '',
+      data.original_post_content || '', data.original_post_writer || '', data.user_original_text || '', data.rephrase_suggestion || '', data.did_user_accept || '', data.actual_posted_text || '', data.delta || '',
+      data.platform || '', data.context || '', data.escalation_type || '', data.angel_devil_bot || 'AngelBot'
     ]);
-    return ContentService
-      .createTextOutput(JSON.stringify({ success: true, message: 'Data logged successfully' }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({ success: true, message: 'Data logged successfully' })).setMimeType(ContentService.MimeType.JSON).setHeaders(cors);
   } catch (error) {
-    return ContentService
-      .createTextOutput(JSON.stringify({ success: false, error: error.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: error.toString() })).setMimeType(ContentService.MimeType.JSON).setHeaders(cors);
   }
 }
 ```

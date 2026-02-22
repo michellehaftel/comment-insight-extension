@@ -29,7 +29,25 @@
  * R: AngelBot/DevilBot
  */
 
+// CORS headers so the Chrome extension (or any origin) can POST to this Web App
+function getCorsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type'
+  };
+}
+
+// Handle preflight OPTIONS request (required for CORS from browser/extension)
+function doGet(e) {
+  return ContentService
+    .createTextOutput('')
+    .setMimeType(ContentService.MimeType.TEXT)
+    .setHeaders(getCorsHeaders());
+}
+
 function doPost(e) {
+  const cors = getCorsHeaders();
   try {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
     const data = JSON.parse(e.postData.contents);
@@ -57,12 +75,14 @@ function doPost(e) {
     
     return ContentService
       .createTextOutput(JSON.stringify({ success: true, message: 'Data logged successfully' }))
-      .setMimeType(ContentService.MimeType.JSON);
+      .setMimeType(ContentService.MimeType.JSON)
+      .setHeaders(cors);
       
   } catch (error) {
     return ContentService
       .createTextOutput(JSON.stringify({ success: false, error: error.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
+      .setMimeType(ContentService.MimeType.JSON)
+      .setHeaders(cors);
   }
 }
 

@@ -135,10 +135,11 @@ async function sendToGoogleSheets(data) {
     
     console.log('📤 Sending data to Google Sheets...', { user_id: data.user_id, did_user_accept: data.did_user_accept });
     
+    // Use text/plain to avoid CORS preflight (Apps Script has no doOptions).
     const response = await fetch(GOOGLE_SHEETS_URL, {
       method: 'POST',
       mode: 'cors',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify(data)
     });
     
