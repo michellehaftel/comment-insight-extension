@@ -253,7 +253,8 @@ function setupPostButtonMonitoring() {
         const finalText = getTextContent(composer);
         console.log('📝 Final posted text:', finalText);
         
-        // If we have a pending interaction, update it with actual posted text
+        // If we have a pending interaction (tooltip was shown – they clicked Rephrase or Dismiss), update that row with actual posted text.
+        // This covers: accepted rephrase (as-is or edited) and dismissed (original or manually edited). actual_posted_text = what they literally posted.
         if (lastLoggedInteraction) {
           // Both is_escalating and escalation_type should be based on the user's ORIGINAL text (user_original_text), not the final posted text
           // This tells us if the user's original intent was escalatory, regardless of what they eventually posted
@@ -313,6 +314,10 @@ function setupPostButtonMonitoring() {
  */
 async function logInteraction(data) {
   try {
+    // Skip logging when extension runtime isn't available (e.g. some origins); avoid console noise
+    if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) {
+      return;
+    }
     const postContext = getPostContext();
     
     // Get bot type for A/B testing tracking (if not already in data)
@@ -330,16 +335,19 @@ async function logInteraction(data) {
         actual_posted_text: data.actualPostedText || '',
         rephrase_suggestion: data.rephraseSuggestion || ''
       };
-      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
-        chrome.runtime.sendMessage({ type: 'LOG_INTERACTION', data: logData }, (response) => {
-          if (chrome.runtime.lastError && !chrome.runtime.lastError.message.includes('Extension context invalidated')) {
-            console.error('❌ Error sending update:', chrome.runtime.lastError.message);
+      chrome.runtime.sendMessage({ type: 'LOG_INTERACTION', data: logData }, (response) => {
+        if (chrome.runtime.lastError) {
+            const msg = chrome.runtime.lastError.message;
+            if (msg.includes('Extension context invalidated') || msg.includes('Receiving end does not exist')) {
+              console.warn('⚠️ Logging skipped:', msg);
+            } else {
+              console.error('❌ Error sending update:', msg);
+            }
           } else if (response?.success) {
-            console.log('✅ Row updated in Google Sheets');
-          }
-        });
-        return;
-      }
+          console.log('✅ Row updated in Google Sheets');
+        }
+      });
+      return;
     }
 
     // Handle new posts vs replies
@@ -363,7 +371,7 @@ async function logInteraction(data) {
       platform: detectPlatformName(),
       context: window.location.href,
       post_type: postContext.isReply ? 'reply' : 'new_post',
-      interaction_id: data.interactionId || ''
+      interaction_id: (data.interactionId != null ? String(data.interactionId) : '')
     };
     
     console.log('📊 Logging interaction:', logData);
@@ -372,24 +380,17 @@ async function logInteraction(data) {
       console.log(`✅ Actual posted text: "${data.actualPostedText}"`);
     }
     
-    // Send to background script
-    // Check if chrome runtime is available
-    if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) {
-      console.warn('⚠️ Chrome runtime not available - cannot log interaction');
-      return;
-    }
-    
     try {
       chrome.runtime.sendMessage({
         type: 'LOG_INTERACTION',
         data: logData
       }, (response) => {
         if (chrome.runtime.lastError) {
-          // Handle extension context invalidated error
-          if (chrome.runtime.lastError.message.includes('Extension context invalidated')) {
-            console.warn('⚠️ Extension context invalidated - interaction not logged. Please reload the extension.');
+          const msg = chrome.runtime.lastError.message;
+          if (msg.includes('Extension context invalidated') || msg.includes('Receiving end does not exist')) {
+            console.warn('⚠️ Interaction not logged:', msg);
           } else {
-            console.error('❌ Error sending message:', chrome.runtime.lastError.message);
+            console.error('❌ Error sending message:', msg);
           }
           return;
         }
@@ -398,8 +399,9 @@ async function logInteraction(data) {
         }
       });
     } catch (sendError) {
-      if (sendError.message && sendError.message.includes('Extension context invalidated')) {
-        console.warn('⚠️ Extension context invalidated - interaction not logged. Please reload the extension.');
+      const msg = sendError?.message || '';
+      if (msg.includes('Extension context invalidated') || msg.includes('Receiving end does not exist')) {
+        console.warn('⚠️ Interaction not logged:', msg);
       } else {
         console.error('❌ Error sending message to background:', sendError);
       }
@@ -1304,40 +1306,43 @@ async function rephraseViaAPI(text, context = null, botType = 'angel') {
       context = getPostContext();
     }
     
-    // Prepare request to proxy server
-    // Note: Prompt is now optional - proxy server will use ECPM_PROMPT environment variable first,
-    // then fall back to request body prompt, then default. This allows prompt updates without Chrome Web Store approval.
+    // Proxy only allows text up to 5000 chars; keep context generous so rephrase quality stays high
+    const MAX_TEXT_LEN = 5000;
+    const MAX_CONTEXT_LEN = 4000;
+    const textToSend = (typeof text === 'string' && text.length > MAX_TEXT_LEN)
+      ? text.substring(0, MAX_TEXT_LEN)
+      : text;
+    const origPost = (context.originalPostContent || '').toString();
+    const origWriter = (context.originalPostWriter || '').toString();
+    const origPostToSend = origPost.length > MAX_CONTEXT_LEN ? origPost.substring(0, MAX_CONTEXT_LEN) : origPost;
+    if (text.length > MAX_TEXT_LEN) {
+      console.warn('⚠️ Rephrase: draft text was truncated to', MAX_TEXT_LEN, 'chars (proxy limit). Very long drafts may lose some nuance.');
+    }
+    if (origPost.length > MAX_CONTEXT_LEN) {
+      console.warn('⚠️ Rephrase: original post context was truncated to', MAX_CONTEXT_LEN, 'chars for sending.');
+    }
+
+    // Prepare request (proxy uses ECPM_PROMPT env or its default prompt — same quality as before)
     const requestBody = {
-      text: text,
+      text: textToSend,
       context: {
-        originalPostContent: context.originalPostContent || '',
-        originalPostWriter: context.originalPostWriter || '',
+        originalPostContent: origPostToSend,
+        originalPostWriter: origWriter.length > 500 ? origWriter.substring(0, 500) : origWriter,
         isReply: context.isReply || false,
-        pageUrl: typeof window !== 'undefined' ? window.location.href : ''
+        pageUrl: typeof window !== 'undefined' ? (window.location.href || '').substring(0, 500) : ''
       },
       model: API_CONFIG.model || 'gpt-4o',
       temperature: API_CONFIG.temperature || 1.0,
       max_tokens: API_CONFIG.max_tokens || 2048,
       top_p: API_CONFIG.top_p || 1.0,
-      bot_type: botType || 'angel' // NEW: Specify which bot (angel = de-escalation, devil = escalation)
-      // Prompt is now optional - only send if available (as fallback)
-      // Proxy server prioritizes: 1) ECPM_PROMPT env var, 2) req.body.prompt, 3) default
+      bot_type: botType || 'angel'
     };
-    
-    // Only include prompt in request if it's available (as fallback)
-    // This allows the proxy server to use the environment variable instead
-    if (typeof ECPM_PROMPT !== 'undefined' && ECPM_PROMPT) {
-      requestBody.prompt = ECPM_PROMPT;
-      console.log('📝 Sending prompt from extension (fallback - proxy will use env var if available)');
-    } else {
-      console.log('📝 No prompt in extension - proxy server will use environment variable or default');
-    }
-    
+
     console.log('🤖 Calling proxy server for rephrasing...');
     console.log('📡 Proxy URL:', PROXY_SERVER_URL);
     console.log('📝 Model:', requestBody.model);
-    console.log('📝 Text to rephrase:', text.substring(0, 100) + (text.length > 100 ? '...' : ''));
-    console.log('📝 Text length:', text.length);
+    console.log('📝 Text to rephrase:', textToSend.substring(0, 100) + (textToSend.length > 100 ? '...' : ''));
+    console.log('📝 Text length:', textToSend.length);
     console.log('📝 Context provided:', {
       hasContext: !!context,
       isReply: context?.isReply,
@@ -2756,20 +2761,19 @@ async function createEscalationTooltip(originalText, element, escalationType = '
       e.stopPropagation();
       console.log("🚫 Dismiss button clicked - closing tooltip");
       
-      // On Dismiss: they kept their original text (did not accept rephrase)
+      // On Dismiss: did_user_accept = Not accepted. actual_posted_text stays empty until they click Post (they may edit manually first).
       const interactionData = {
-        usersOriginalContent: originalText,
         rephraseSuggestion: (rephrasedText && typeof rephrasedText === 'string') ? rephrasedText : '',
         didUserAccept: 'no',
-        actualPostedText: originalText, // Same as original – they dismissed the rephrase
-        escalationType,
-        isEscalating: escalationType !== 'none' && escalationType !== 'unknown',
-        botType: botType || 'angel',
+        actualPostedText: '', // Filled when they click Post (captures any manual edits after dismiss)
         interactionId: lastLoggedInteraction?.interactionId || null
       };
-      lastLoggedInteraction = null;
+      // Keep lastLoggedInteraction so when they click Post we can update this row with actual_posted_text (whatever is in the composer then)
+      if (lastLoggedInteraction) {
+        lastLoggedInteraction = { ...lastLoggedInteraction, didUserAccept: 'no' };
+      }
       logInteraction(interactionData);
-      console.log("💾 Updated row with dismiss in Google Sheets");
+      console.log("💾 Updated row with dismiss in Google Sheets (actual_posted_text will be set when they click Post)");
       lastContentWhenUserMadeChoice = originalText; // No second tooltip until user edits
       
       // Clean up position handlers and remove tooltip
@@ -3085,14 +3089,14 @@ async function createEscalationTooltip(originalText, element, escalationType = '
           console.log("✅ Text successfully rephrased! New text:", verifyText);
           lastLoggedInteraction = { ...lastLoggedInteraction, didUserAccept: 'yes' };
           lastContentWhenUserMadeChoice = (verifyText || rephrasedText || '').trim(); // No second tooltip until user edits
-          // Update sheet immediately: "Did User Accept" → Accepted (don't wait for Post)
+          // Update sheet: did_user_accept = Accepted only. actual_posted_text is set when they click Post (what they literally post).
           logInteraction({
             interactionId: lastLoggedInteraction.interactionId,
             didUserAccept: 'yes',
-            actualPostedText: verifyText || rephrasedText || '',
+            actualPostedText: '', // Leave empty until Post – user may edit before posting
             rephraseSuggestion: lastLoggedInteraction.rephraseSuggestion || rephrasedText || ''
           });
-          console.log("💾 Row updated to Accepted in Google Sheets (will update actual_posted_text when they click Post)");
+          console.log("💾 Row updated to Accepted in Google Sheets (actual_posted_text will be set when they click Post)");
           
           // Show success tooltip
           console.log("🎉 Calling showSuccessTooltip with element:", elementToRephrase);

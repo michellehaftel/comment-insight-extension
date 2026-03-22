@@ -279,7 +279,8 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
     // Format context for the prompt
     let contextText = 'No context provided';
     if (context && context.originalPostContent && context.originalPostContent !== 'new') {
-      contextText = `Original Post/Comment: "${context.originalPostContent.substring(0, 300)}"`;  // Reduced from 500 to 300 to reduce prompt length
+      // Use up to 800 chars so rephrase quality stays high when replying to long posts
+      contextText = `Original Post/Comment: "${context.originalPostContent.substring(0, 800)}"`;
       if (context.originalPostWriter && context.originalPostWriter !== 'new') {
         contextText += `\nAuthor: ${context.originalPostWriter}`;
       }
@@ -310,24 +311,33 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
         });
       }
       
-      const geminiModel = model || 'gemini-2.5-flash';
+      // Prefer fast model for low latency; extension can still send model, env override wins for speed
+      const geminiModel = process.env.PREFERRED_MODEL || model || 'gemini-2.5-flash';
       // Use v1beta - this is the correct API version for current models
       const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
       
       // Build request - use responseMimeType to request JSON format
-      // Note: responseSchema might not be supported by all models, so we rely on prompt instructions + responseMimeType
+      // Optional: GEMINI_THINKING_BUDGET=0 disables thinking (faster); 1024–8192 limits it (speed/quality tradeoff)
+      const generationConfig = {
+        temperature: temperature || 1.0,
+        maxOutputTokens: max_tokens || 2048,
+        topP: top_p || 1.0,
+        responseMimeType: 'application/json'
+      };
+      const thinkingBudgetEnv = process.env.GEMINI_THINKING_BUDGET;
+      if (thinkingBudgetEnv !== undefined && thinkingBudgetEnv !== '') {
+        const budget = parseInt(thinkingBudgetEnv, 10);
+        if (!Number.isNaN(budget) && budget >= 0) {
+          generationConfig.thinkingConfig = { thinkingBudget: budget };
+        }
+      }
       const geminiRequest = {
         contents: [{
           parts: [{
             text: fullPrompt
           }]
         }],
-        generationConfig: {
-          temperature: temperature || 1.0,
-          maxOutputTokens: max_tokens || 2048,
-          topP: top_p || 1.0,
-          responseMimeType: 'application/json'
-        }
+        generationConfig
       };
       
       console.log(`📝 Forwarding request to Gemini (text length: ${text.length}, model: ${geminiModel})`);
@@ -529,8 +539,9 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
         });
       }
       
+      const openaiModel = process.env.PREFERRED_MODEL || model || 'gpt-4o';
       const openaiRequest = {
-        model: model || 'gpt-4o',
+        model: openaiModel,
         messages: [
           {
             role: 'user',
