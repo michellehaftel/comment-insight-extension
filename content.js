@@ -2585,8 +2585,12 @@ async function createEscalationTooltip(originalText, element, escalationType = '
           <p class="tooltip-suggestion-text"></p>
         </div>
         <div class="tooltip-buttons">
-          <button id="dismissBtn" class="tooltip-btn dismiss-btn">${uiText.dismiss}</button>
-          <button id="rephraseBtn" class="tooltip-btn rephrase-btn loading" disabled>
+          <div id="rephraseLoader" style="display:flex;align-items:center;justify-content:center;gap:10px;padding:6px 0;">
+            <span class="spinner"></span>
+            <span class="tooltip-loading-text">${uiText.generating}</span>
+          </div>
+          <button id="dismissBtn" class="tooltip-btn dismiss-btn" style="display:none;">${uiText.dismiss}</button>
+          <button id="rephraseBtn" class="tooltip-btn rephrase-btn loading" disabled style="display:none;">
             <span class="spinner"></span>
             ${uiText.rephrase}
           </button>
@@ -2753,37 +2757,7 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   let rephrasingError = false;
 
   // IMPORTANT: Attach dismiss button event listener IMMEDIATELY so it works during loading
-  // This must be done before the async rephrasing starts
-  const dismissBtn = tooltip.querySelector("#dismissBtn");
-  if (dismissBtn) {
-      dismissBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      console.log("🚫 Dismiss button clicked - closing tooltip");
-      
-      // On Dismiss: did_user_accept = Not accepted. actual_posted_text stays empty until they click Post (they may edit manually first).
-      const interactionData = {
-        rephraseSuggestion: (rephrasedText && typeof rephrasedText === 'string') ? rephrasedText : '',
-        didUserAccept: 'no',
-        actualPostedText: '', // Filled when they click Post (captures any manual edits after dismiss)
-        interactionId: lastLoggedInteraction?.interactionId || null
-      };
-      // Keep lastLoggedInteraction so when they click Post we can update this row with actual_posted_text (whatever is in the composer then)
-      if (lastLoggedInteraction) {
-        lastLoggedInteraction = { ...lastLoggedInteraction, didUserAccept: 'no' };
-      }
-      logInteraction(interactionData);
-      console.log("💾 Updated row with dismiss in Google Sheets (actual_posted_text will be set when they click Post)");
-      lastContentWhenUserMadeChoice = originalText; // No second tooltip until user edits
-      
-      // Clean up position handlers and remove tooltip
-      if (tooltip && tooltip.parentNode) {
-        tooltip.remove();
-      }
-    }, { once: false });
-  } else {
-    console.error("❌ Dismiss button not found in tooltip!");
-  }
+  // (We attach dismiss handler after rephrase loading finishes, because dismiss is hidden during loading.)
 
   // Generate rephrased version (async - uses Gemini API only, no fallback)
   try {
@@ -2837,9 +2811,14 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     if (rephraseBtn) {
       rephraseBtn.disabled = false;
       rephraseBtn.classList.remove('loading');
+      rephraseBtn.style.display = ''; // Reveal the button now that the suggestion is ready
       const spinner = rephraseBtn.querySelector('.spinner');
       if (spinner) spinner.remove();
     }
+    const loaderEl = tooltip.querySelector('#rephraseLoader');
+    if (loaderEl) loaderEl.style.display = 'none';
+    const dismissBtn = tooltip.querySelector('#dismissBtn');
+    if (dismissBtn) dismissBtn.style.display = '';
   } else {
     // If rephrasing failed or returned null, show appropriate message
     // DISABLED: Hebrew support - always use English error message
@@ -2881,11 +2860,16 @@ async function createEscalationTooltip(originalText, element, escalationType = '
       rephraseBtn.disabled = false; // Enable button for "Rephrase on my own"
       rephraseBtn.textContent = buttonText;
       rephraseBtn.classList.remove('loading');
+      rephraseBtn.style.display = ''; // Reveal button now that loading is finished
       const spinner = rephraseBtn.querySelector('.spinner');
       if (spinner) spinner.remove();
       
       console.log("📊 Button updated:", { text: buttonText, enabled: !rephraseBtn.disabled, allowManualRephrase });
     }
+    const loaderEl = tooltip.querySelector('#rephraseLoader');
+    if (loaderEl) loaderEl.style.display = 'none';
+    const dismissBtn = tooltip.querySelector('#dismissBtn');
+    if (dismissBtn) dismissBtn.style.display = '';
   }
   
   // Log final state
@@ -2932,7 +2916,38 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     });
   }
 
-  // Add event listener for rephrase button (dismiss button already handled above)
+  // Add event listeners for dismiss + rephrase buttons.
+  // Dismiss is hidden during loading, so we attach its handler only after loading finishes.
+  const dismissBtnElement = tooltip.querySelector("#dismissBtn");
+  if (dismissBtnElement) {
+    dismissBtnElement.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log("🚫 Dismiss button clicked - closing tooltip");
+      
+      // On Dismiss: did_user_accept = Not accepted. actual_posted_text stays empty until they click Post.
+      const interactionData = {
+        rephraseSuggestion: (rephrasedText && typeof rephrasedText === 'string') ? rephrasedText : '',
+        didUserAccept: 'no',
+        actualPostedText: '',
+        interactionId: lastLoggedInteraction?.interactionId || null
+      };
+      
+      // Keep lastLoggedInteraction so when they click Post we can update the same row with actual_posted_text.
+      if (lastLoggedInteraction) {
+        lastLoggedInteraction = { ...lastLoggedInteraction, didUserAccept: 'no' };
+      }
+      
+      logInteraction(interactionData);
+      console.log("💾 Updated row with dismiss in Google Sheets (actual_posted_text will be set when they click Post)");
+      lastContentWhenUserMadeChoice = originalText; // No second tooltip until user edits
+      
+      if (tooltip && tooltip.parentNode) {
+        tooltip.remove();
+      }
+    }, { once: false });
+  }
+
   // Use tooltip.querySelector instead of document.getElementById to ensure we get the button from THIS tooltip
   const rephraseBtnElement = tooltip.querySelector("#rephraseBtn");
   
