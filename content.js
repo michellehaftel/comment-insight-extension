@@ -366,6 +366,7 @@ async function logInteraction(data) {
       rephrase_suggestion: data.rephraseSuggestion || '',
       did_user_accept: data.didUserAccept || 'no',
       actual_posted_text: data.actualPostedText || '',
+      time_to_rephrase_seconds: data.timeToRephraseSeconds || data.time_to_rephrase_seconds || '',
       escalation_type: data.escalationType || 'unknown',
       bot_type: botType || 'angel',
       platform: detectPlatformName(),
@@ -2761,19 +2762,24 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   // Use undefined to distinguish between: null (already de-escalatory) vs undefined (error)
   let rephrasedText = undefined;
   let rephrasingError = false;
+  let timeToRephraseSeconds = '';
 
   // IMPORTANT: Attach dismiss button event listener IMMEDIATELY so it works during loading
   // (We attach dismiss handler after rephrase loading finishes, because dismiss is hidden during loading.)
 
   // Generate rephrased version (async - uses Gemini API only, no fallback)
   try {
+    const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     rephrasedText = await rephraseForDeEscalation(originalText, botType);
+    const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    timeToRephraseSeconds = Math.max(0, (t1 - t0) / 1000);
     // rephrasedText can be null (already de-escalatory/escalatory) or a string (rephrased text)
     // undefined means an error occurred
   } catch (error) {
     console.error('❌ Error during rephrasing:', error);
     rephrasingError = true;
     rephrasedText = undefined; // Keep as undefined to distinguish from null (already de-escalatory/escalatory)
+    timeToRephraseSeconds = '';
   }
   
   // Update tooltip with the rephrased text
@@ -2916,6 +2922,7 @@ async function createEscalationTooltip(originalText, element, escalationType = '
       rephraseSuggestion: rephraseForLog,
       didUserAccept: 'pending',
       actualPostedText: '',
+      timeToRephraseSeconds: rephrasingError ? '' : timeToRephraseSeconds,
       escalationType,
       isEscalating: escalationType !== 'none' && escalationType !== 'unknown',
       botType: botType || 'angel',

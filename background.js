@@ -128,6 +128,7 @@ async function handleDataLogging(data) {
       rephrase_suggestion: data.rephrase_suggestion || '',
       did_user_accept: normalizeDidUserAccept(data.did_user_accept),
       actual_posted_text: data.actual_posted_text || '',
+      time_to_rephrase_seconds: data.time_to_rephrase_seconds || data.timeToRephraseSeconds || '',
       delta: delta,
       platform: data.platform || 'unknown',
       context: data.context || '',

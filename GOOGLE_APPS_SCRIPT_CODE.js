@@ -28,6 +28,7 @@
  * Q: escalation_type
  * R: AngelBot/DevilBot
  * S: interaction_id – internal ID linking the "pending" row to the later update (Post/Dismiss). Safe to ignore when analysing data.
+ * T: time_to_rephrase_seconds – time spent waiting for the rephrase suggestion (seconds). Blank when not applicable.
  */
 
 // CORS headers so the Chrome extension (or any origin) can POST to this Web App
@@ -52,6 +53,9 @@ function doPost(e) {
   try {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
     const data = JSON.parse(e.postData.contents);
+
+    // Column indices (1-based)
+    const TIME_COL = 20; // Column T
 
     // Update existing row by interaction_id (when user clicks Post or Dismiss)
     if (data.action === 'update' && data.interaction_id) {
@@ -88,6 +92,9 @@ function doPost(e) {
       sheet.getRange(rowIndex, 12).setValue(data.did_user_accept || '');
       sheet.getRange(rowIndex, 13).setValue(data.actual_posted_text || '');
       sheet.getRange(rowIndex, 14).setValue(data.delta || '');
+      if (data.time_to_rephrase_seconds !== undefined) {
+        sheet.getRange(rowIndex, TIME_COL).setValue(data.time_to_rephrase_seconds || '');
+      }
       return ContentService
         .createTextOutput(JSON.stringify({ success: true, message: 'Row updated successfully' }))
         .setMimeType(ContentService.MimeType.JSON)
@@ -114,8 +121,43 @@ function doPost(e) {
       data.context || '',                    // Column P (16)
       data.escalation_type || '',            // Column Q (17)
       data.angel_devil_bot || 'AngelBot',    // Column R (18)
-      data.interaction_id || ''              // Column S (19)
+      data.interaction_id || '',             // Column S (19)
+      data.time_to_rephrase_seconds || ''   // Column T (20)
     ]);
+
+    // Set header + conditional formatting once (best-effort)
+    const props = PropertiesService.getScriptProperties();
+    const alreadyApplied = props.getProperty('time_rephrase_format_applied') === 'true';
+    if (!alreadyApplied) {
+      // Header label
+      const headerCell = sheet.getRange(1, TIME_COL);
+      if (!headerCell.getValue()) {
+        headerCell.setValue('time_to_rephrase_seconds');
+      }
+
+      // Conditional formatting: if time > 7 seconds, make font red
+      const existingRules = sheet.getConditionalFormatRules();
+      const formatRange = sheet.getRange(2, TIME_COL, Math.max(1, sheet.getMaxRows() - 1));
+      const alreadyHasRule = existingRules.some(rule => {
+        try {
+          const ranges = rule.getRanges();
+          return ranges && ranges.length > 0 && ranges[0].getColumn() === TIME_COL;
+        } catch (err) {
+          return false;
+        }
+      });
+
+      if (!alreadyHasRule) {
+        const rule = SpreadsheetApp.newConditionalFormatRule()
+          .whenNumberGreaterThan(7)
+          .setFontColor('#ff0000')
+          .setRanges([formatRange])
+          .build();
+        sheet.setConditionalFormatRules(existingRules.concat([rule]));
+      }
+
+      props.setProperty('time_rephrase_format_applied', 'true');
+    }
 
     return ContentService
       .createTextOutput(JSON.stringify({ success: true, message: 'Data logged successfully' }))
