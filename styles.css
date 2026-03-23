@@ -45,6 +45,12 @@
   flex-shrink: 0;
 }
 
+/* Tooltip header row (message + inline loader) */
+.escalation-tooltip .tooltip-message-row {
+  /* Keep the same vertical spacing as the suggested-box to buttons gap */
+  margin: 0 0 12px 0;
+}
+
 /* Tooltip suggestion section - shadcn style */
 .tooltip-suggestion {
   background: #fafafa;
