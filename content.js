@@ -2579,15 +2579,17 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   tooltip.innerHTML = `
     <div class="tooltip-container">
       <div class="tooltip-content">
-        <p class="tooltip-message">${uiText.warning}</p>
+        <div class="tooltip-message-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <p class="tooltip-message" style="margin:0;">${uiText.warning}</p>
+          <div id="rephraseLoaderInline" style="display:flex;align-items:center;justify-content:center;">
+            <span class="spinner"></span>
+          </div>
+        </div>
         <div class="tooltip-suggestion" style="display: none;">
           <p class="tooltip-suggestion-label">${uiText.suggestLabel}</p>
           <p class="tooltip-suggestion-text"></p>
         </div>
         <div class="tooltip-buttons">
-          <div id="rephraseLoader" style="display:flex;align-items:center;justify-content:center;gap:10px;padding:6px 0;">
-            <span class="spinner"></span>
-          </div>
           <button id="dismissBtn" class="tooltip-btn dismiss-btn" style="display:none;">${uiText.dismiss}</button>
           <button id="rephraseBtn" class="tooltip-btn rephrase-btn loading" disabled style="display:none;">
             <span class="spinner"></span>
@@ -2598,9 +2600,6 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     </div>
   `;
   document.body.appendChild(tooltip);
-  // During loading we keep the same message, but prefix it with a "⏳" (no extra "Generating..." sentence).
-  const tooltipMessage = tooltip.querySelector('.tooltip-message');
-  if (tooltipMessage) tooltipMessage.textContent = `⏳ ${uiText.warning}`;
   console.log("✅ Tooltip created and appended to DOM:", {
     tooltipInDOM: tooltip.parentNode === document.body,
     tooltipElement: tooltip,
@@ -2779,8 +2778,7 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   
   // Check if we have a valid rephrased text (string)
   if (suggestionText && rephrasedText && typeof rephrasedText === 'string' && rephrasedText.trim().length > 0) {
-    // Rephrasing finished - remove loading emoji from the main message
-    if (tooltipMessage) tooltipMessage.textContent = uiText.warning;
+    // Rephrasing finished - hide inline loader beside the message
     // Show the suggestion container now that we have the rephrased text
     if (suggestionContainer) {
       suggestionContainer.style.display = 'block';
@@ -2819,15 +2817,13 @@ async function createEscalationTooltip(originalText, element, escalationType = '
       const spinner = rephraseBtn.querySelector('.spinner');
       if (spinner) spinner.remove();
     }
-    const loaderEl = tooltip.querySelector('#rephraseLoader');
+    const loaderEl = tooltip.querySelector('#rephraseLoaderInline');
     if (loaderEl) loaderEl.style.display = 'none';
     const dismissBtn = tooltip.querySelector('#dismissBtn');
     if (dismissBtn) dismissBtn.style.display = '';
   } else {
     // If rephrasing failed or returned null, show appropriate message
     // DISABLED: Hebrew support - always use English error message
-    // Rephrasing finished - remove loading emoji from the main message
-    if (tooltipMessage) tooltipMessage.textContent = uiText.warning;
     let errorMsg;
     let buttonText = "Rephrase";
     let allowManualRephrase = false;
@@ -2872,7 +2868,7 @@ async function createEscalationTooltip(originalText, element, escalationType = '
       
       console.log("📊 Button updated:", { text: buttonText, enabled: !rephraseBtn.disabled, allowManualRephrase });
     }
-    const loaderEl = tooltip.querySelector('#rephraseLoader');
+    const loaderEl = tooltip.querySelector('#rephraseLoaderInline');
     if (loaderEl) loaderEl.style.display = 'none';
     const dismissBtn = tooltip.querySelector('#dismissBtn');
     if (dismissBtn) dismissBtn.style.display = '';
