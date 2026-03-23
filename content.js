@@ -333,7 +333,8 @@ async function logInteraction(data) {
         interaction_id: data.interactionId,
         did_user_accept: data.didUserAccept || 'no',
         actual_posted_text: data.actualPostedText || '',
-        rephrase_suggestion: data.rephraseSuggestion || ''
+        rephrase_suggestion: data.rephraseSuggestion || '',
+        time_to_rephrase_seconds: data.timeToRephraseSeconds || data.time_to_rephrase_seconds || ''
       };
       chrome.runtime.sendMessage({ type: 'LOG_INTERACTION', data: logData }, (response) => {
         if (chrome.runtime.lastError) {
@@ -2903,6 +2904,7 @@ async function createEscalationTooltip(originalText, element, escalationType = '
       ...lastLoggedInteraction,
       usersOriginalContent: originalText,
       rephraseSuggestion: rephraseForLog,
+      timeToRephraseSeconds: rephrasingError ? '' : timeToRephraseSeconds,
       escalationType,
       isEscalating: escalationType !== 'none' && escalationType !== 'unknown',
       botType: botType || 'angel'
@@ -2913,6 +2915,7 @@ async function createEscalationTooltip(originalText, element, escalationType = '
       interactionId,
       usersOriginalContent: originalText,
       rephraseSuggestion: rephraseForLog,
+      timeToRephraseSeconds: rephrasingError ? '' : timeToRephraseSeconds,
       escalationType,
       isEscalating: escalationType !== 'none' && escalationType !== 'unknown',
       botType: botType || 'angel'
@@ -2944,6 +2947,7 @@ async function createEscalationTooltip(originalText, element, escalationType = '
         rephraseSuggestion: (rephrasedText && typeof rephrasedText === 'string') ? rephrasedText : '',
         didUserAccept: 'no',
         actualPostedText: '',
+        timeToRephraseSeconds: lastLoggedInteraction?.timeToRephraseSeconds || '',
         interactionId: lastLoggedInteraction?.interactionId || null
       };
       
@@ -3123,7 +3127,8 @@ async function createEscalationTooltip(originalText, element, escalationType = '
             interactionId: lastLoggedInteraction.interactionId,
             didUserAccept: 'yes',
             actualPostedText: '', // Leave empty until Post – user may edit before posting
-            rephraseSuggestion: lastLoggedInteraction.rephraseSuggestion || rephrasedText || ''
+            rephraseSuggestion: lastLoggedInteraction.rephraseSuggestion || rephrasedText || '',
+            timeToRephraseSeconds: lastLoggedInteraction?.timeToRephraseSeconds || ''
           });
           console.log("💾 Row updated to Accepted in Google Sheets (actual_posted_text will be set when they click Post)");
           
