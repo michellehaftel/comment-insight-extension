@@ -407,7 +407,12 @@ async function logInteraction(data) {
       }
     }
   } catch (error) {
-    console.error('❌ Error logging interaction:', error);
+    const msg = error?.message || '';
+    if (msg.includes('Extension context invalidated') || msg.includes('Receiving end does not exist')) {
+      console.warn('⚠️ Interaction not logged:', msg);
+    } else {
+      console.error('❌ Error logging interaction:', error);
+    }
   }
 }
 
