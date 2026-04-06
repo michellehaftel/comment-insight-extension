@@ -540,13 +540,10 @@ function hasHighRiskKeywords(text) {
 
 /**
  * Detect if text contains Hebrew characters
- * DISABLED: Hebrew support is currently deactivated
  */
 function containsHebrew(text) {
   // Hebrew Unicode range: \u0590-\u05FF
-  // DISABLED: Always return false to disable Hebrew support
-  return false;
-  // return /[\u0590-\u05FF]/.test(text);
+  return /[\u0590-\u05FF]/.test(text);
 }
 
 /**
@@ -607,12 +604,10 @@ function isEscalating(text) {
   // If text contains Hebrew or other non-Latin characters, and API is enabled,
   // we should use API-based detection (but for now, allow it through for API check)
   const hasNonLatin = containsNonLatin(trimmedText);
-  const hasHebrew = false; // DISABLED: containsHebrew(trimmedText);
-  
-  // DISABLED: Hebrew special handling
-  // For non-English text (especially Hebrew), we rely on API for detection
-  // So we return a moderate escalation score to trigger API check
-  if (false && (hasHebrew || (hasNonLatin && USE_API))) {
+  const hasHebrew = containsHebrew(trimmedText);
+
+  // For non-English text (especially Hebrew), rely on API for detection
+  if (hasHebrew || (hasNonLatin && USE_API)) {
     // If we have substantial text in Hebrew, assume it might be escalatory
     // and let the API do the real detection
     if (trimmedText.length >= 10) {
@@ -665,8 +660,12 @@ function isEscalating(text) {
   const generalizedPatterns = [
     /\b(the (?:arabs|palestinians|jews|israelis|leftists?|rightists?|lefties?|righties?|leftys?|rightys?|laefies?|republicans|democrats|liberals|conservatives|orthodox|libs?|zionists?))\b/i,
     /\b(the (?:tel avivians?|jerusalemites?|settlers?|hasidim|settlements?))\b/i, // "the Tel Avivians are...", "the settlers"
+    /\b(the (?:women|men|girls|boys|females|males|blonds?|blondes?|redheads?|vegans?|rednecks?|religious|ultra-orthodox|ultraorthodox))\b/i,
+    /\b(the (?:black people|white people|asian people|muslim people|christian people|jewish people))\b/i,
     /\b(all (?:arabs|palestinians|jews|israelis|leftists?|rightists?|lefties?|righties?|libs?|republicans|democrats|liberals|conservatives|of them|of you))\b/i,
+    /\b(all (?:women|men|girls|boys|vegans?|rednecks?|blonds?|blondes?|redheads?|religious|ultra-orthodox|ultraorthodox|black people|white people|asian people|muslim people|christian people|jewish people))\b/i,
     /\b(every (?:arab|palestinian|jew|israeli|leftist|rightist|leftie|rightie|lib|republican|democrat|liberal|conservative))\b/i,
+    /\b(every (?:woman|man|girl|boy|vegan|redneck|blond|blonde|redhead|religious person|ultra-orthodox person|ultraorthodox person))\b/i,
     /\b(they all|you all|all of you|all of them)\b/i,
     /\b(?:those|these) (?:people|guys|folks) (?:on the (?:other side|left|right))\b/i, // "those people on the other side"
     /\b(?:anyone|everyone|everybody) who (?:supports?|believes?|thinks?|agrees?)\b/i, // "anyone who supports"
@@ -683,6 +682,19 @@ function isEscalating(text) {
     if (pattern.test(trimmedText)) {
       escalationScore += 2;
       reasons.push("Generalized/categorical statement");
+    }
+  });
+
+  // Group-stereotype question patterns (e.g., "Why do women always behave this way?")
+  const stereotypeQuestionPatterns = [
+    /\bwhy do (?:women|men|girls|boys|vegans?|rednecks?|blonds?|blondes?|redheads?|lefties?|righties?|israelis|palestinians|jews|arabs|religious|ultra-orthodox|ultraorthodox|black people|white people|asian people) always\b/i,
+    /\b(?:women|men|girls|boys|vegans?|rednecks?|blonds?|blondes?|redheads?|lefties?|righties?|israelis|palestinians|jews|arabs|religious|ultra-orthodox|ultraorthodox|black people|white people|asian people) always (?:behave|act|think|do|say)\b/i
+  ];
+
+  stereotypeQuestionPatterns.forEach(pattern => {
+    if (pattern.test(trimmedText)) {
+      escalationScore += 2;
+      reasons.push("Group stereotype/generalization");
     }
   });
 

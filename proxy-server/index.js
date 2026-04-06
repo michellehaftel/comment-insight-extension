@@ -100,8 +100,29 @@ const DEFAULT_ECPM_PROMPT = `CRITICAL: Respond with ONLY valid JSON. No markdown
 You are an ECPM (Emotional-Cognitive Psycholinguistic Model) analyzer for social media. Detect escalation and rephrase using de-escalation principles while preserving essence.
 
 ECPM FRAMEWORK:
-- Cognitive: Argumentative (absolute truths, "you're wrong") vs Subjective ("I see things differently")
+- Cognitive: Argumentative (absolute truths, categorical dismissals) vs Subjective ("I see things differently")
+  - Escalatory: "you're wrong", "this is complete nonsense", "that's ridiculous" — absolute verdicts that shut down dialogue
+  - Non-escalatory: "I disagree", "I see it differently", "I don't think that's right because X" — subjective, open to discussion
+  - KEY: Absolute dismissals of a person's contribution ("this is nonsense/garbage/absurd") are cognitive escalation even when they don't directly attack the person — they reject and push away rather than engage
 - Emotional: Blame ("you're making me sick") vs Self-accountability ("I feel frustrated")
+  - KEY: Blame disguised as self-expression is still emotional escalation. "I feel that without you I could feel safe here" uses "I feel" language but the message is "you are the problem" — detect the content, not just the framing.
+  - Escalatory: "Without you I could feel safe here", "I feel sick because of what you do", "I feel helpless because of people like you"
+  - Non-escalatory: "I feel helpless in this situation", "I feel frustrated by what's happening" — genuine self-expression with no blame attribution
+
+INDIRECT ESCALATION — RHETORICAL DEVICES (CRITICAL):
+Sarcasm, irony, cynicism, and rhetorical questions are escalation vehicles — sometimes more cutting than direct insults because they are harder to counter. Detect them even when no explicit profanity or direct attack is present.
+- Cynical sarcasm: "Sometimes I wonder whether Bibi's tongue could find an even deeper spot up Trump's ass" — the wondering is not genuine; it's a contemptuous rhetorical device
+- Rhetorical questions used to demean: "Do you seriously have nothing better to do ALL DAY? Is there NO ONE who loves you?" — not genuine questions, they are attacks framed as curiosity
+- Irony/mockery: praising someone in a way that is clearly contemptuous ("Wow, what a brilliant idea...")
+- These are escalatory even when the surface language appears calm or indirect
+- Preserve and treat these as part of the escalation type (cognitive, emotional, or both)
+
+CRITICAL DISTINCTION — Sarcasm as weapon vs. Sarcasm as political satire:
+Not all sarcasm is escalatory. The key question is: what is the sarcasm directed at?
+- ESCALATORY — Sarcasm as weapon: directed at a specific person or group to demean, mock, or humiliate them. ("What happened Bibi? No voters in Haifa?", "Sometimes I wonder how deep Bibi's tongue goes up Trump's ass")
+- NOT ESCALATORY — Sarcasm as political satire: directed at a policy, institution, or systemic failure — not at a person's character. ("Americans still have a lot to learn from us — abandon soldiers for two years, curse those who protest for their release..." — this critiques government policy through bitter irony, not a person)
+- Ask: is the TARGET a person/group (escalatory) or a policy/situation/institution (not escalatory)?
+- Ask: is the PURPOSE to humiliate someone, or to expose a systemic hypocrisy or failure?
 
 CONTEXT AWARENESS (CRITICAL):
 When context is provided, analyze:
@@ -110,10 +131,28 @@ When context is provided, analyze:
 3. How context affects the analysis (e.g., criticizing documented actions vs personal attacks)
 Distinguish legitimate criticism from gratuitous attacks based on context.
 
+GROUP-BASED STEREOTYPES (CRITICAL):
+Treat stereotype-based labeling/generalization as escalation — this is not only about direct attacks on a group.
+- If text attacks, dismisses, or demeans a group identity (political, ethnic, religious, gender, location, lifestyle, appearance, etc.), mark this as escalatory.
+- Examples include (not exhaustive): "lefties/righties", "Israelis", "Tel Avivians", "vegans", "rednecks", "Black people", "religious/ultra-orthodox", "blonds/redheads", "women/men".
+- IMPORTANT: Jokes and humor that rely on a derogatory group stereotype are also escalatory — the humorous framing does not neutralize the stereotype. A joke about women not knowing how to drive, blondes being stupid, or Black people being criminals is both a stereotype AND a form of us-vs-them positioning (elevating the joke-teller's group by demeaning another).
+- Distinguish between:
+  - Legitimate critique of ideas/actions/policies (can be non-escalatory)
+  - Blanket claims, derogatory stereotypes, or stereotype-based humor about groups (escalatory)
+
+US-VS-THEM FRAMING (CRITICAL):
+In-group/out-group framing that implicitly or explicitly portrays the out-group as inferior, destructive, or illegitimate is cognitive escalation — even when stated calmly and without profanity.
+- "We are patriots / you don't care about this country" → escalatory
+- "We follow values / you have abandoned them" → escalatory
+- Repeated "you" (or "אתם") accusations contrasted with an implied virtuous "we" → escalatory
+- Categorical claims about what all members of a group are, believe, or want → escalatory
+- Distinguish from: factual comparisons of positions or policies between groups (non-escalatory)
+
 CONTEXT: {CONTEXT}
 TEXT: "{TEXT}"
 
 TASK: Detect escalation and rephrase if needed, preserving ESSENCE (core message) while transforming DELIVERY (linguistic style).
+Always respond in the same language as the input text.
 
 REPHRASING PRINCIPLES:
 
@@ -130,7 +169,23 @@ Before transforming, identify:
 - Maintain second-person address naturally when original uses "you"
 - Use context to reference specific issues/facts that create disagreement
 
-3. CRITICAL: Rephrased text must feel like the SAME PERSON expressing the SAME IDEA, just using ECPM-aligned language.
+3. SURGICAL TRANSFORMATION (CRITICAL):
+When only parts of the text are escalatory, transform ONLY those parts — preserve the non-escalatory sentences and phrases word-for-word. Do NOT rewrite the entire text.
+- Identify which specific words, labels, or sentences carry the escalation
+- Replace only those, leave everything else untouched
+- Example: "I read this 3 times to understand it was really you. You're a lying snake and your policy on X caused real harm" → "I read this 3 times to understand it was really you. I strongly disagree with your approach and your policy on X caused real harm" (only "lying snake" was transformed; the rest preserved as-is)
+
+4. NATURAL SOCIAL MEDIA TONE:
+The rephrase must sound like something a real person would actually post — not like a therapist or a formal letter.
+- Keep it roughly the same length as the original
+- Match the register and energy of the original (casual, direct, passionate — just de-escalated)
+- Do NOT add filler phrases like "I hope we can find common ground", "I remain hopeful", "I'd like to express"
+- Do NOT over-explain or add reasoning that wasn't in the original
+
+GOOD rephrase: "Merry Christmas to all, including the Radical Left Scum doing everything to destroy our Country" → "Merry Christmas to all, including those on the radical left with whom I strongly disagree." ✅ (short, same energy, natural)
+BAD rephrase: "Merry Christmas to all, including the Radical Left Scum doing everything to destroy our Country" → "I would like to wish everyone a Merry Christmas. I strongly disagree with the political left and feel their approach is harmful, though I remain hopeful we can find common ground." ❌ PROBLEM: Too long, too formal, therapy-speak — no one would post this.
+
+5. CRITICAL: Rephrased text must feel like the SAME PERSON expressing the SAME IDEA, just using ECPM-aligned language.
 
 GOOD Examples (preserving essence):
 - "You're wrong about everything" → "I see many things differently from you" (preserves: disagreement)
@@ -143,6 +198,7 @@ GOOD Examples (preserving essence):
 BAD Examples (losing essence - AVOID):
 - "You're wrong about this policy - it's hurting people" → "I see things differently" ❌ PROBLEM: Lost the substantive claim about policy harm
 - "This terrible policy caused documented harm" → "I have some concerns" ❌ PROBLEM: Too weak for legitimate factual criticism
+- "I read this 3 times. You're a liar and your budget policy harmed thousands" → "I see things very differently from you and I have concerns about the policy" ❌ PROBLEM: Rewrote the whole text instead of only transforming "liar"
 
 OUTPUT (JSON only):
 {
@@ -173,17 +229,62 @@ JSON ONLY.`;
 // Angel offers de-escalation; Devil offers an even MORE escalated version.
 const DEFAULT_ECPM_ESCALATION_PROMPT = `CRITICAL: Respond with ONLY valid JSON. No markdown, no explanations. Start with { and end with }.
 
-You are an ECPM (Emotional-Cognitive Psycholinguistic Model) analyzer for social media. The input text has ALREADY been detected as escalatory. Your task is to provide an EVEN MORE escalated version while keeping the user's tone of voice (in a higher volume). Combine emotional and cognitive escalation if needed.
+You are an ECPM (Emotional-Cognitive Psycholinguistic Model) analyzer for social media. Detect escalation and rephrase by AMPLIFYING it — making it even more escalatory while keeping the user's tone of voice (same person, higher volume).
 
-ECPM FRAMEWORK (ESCALATION AMPLIFICATION):
-- Cognitive: Amplify absolute truths, make arguments more categorical ("You're wrong" → "You're completely and utterly wrong")
-- Emotional: Amplify blame and projection ("You're making me sick" → "You make me physically ill")
-- Combine both dimensions when appropriate for maximum impact
+ECPM FRAMEWORK:
+- Cognitive: Argumentative (absolute truths, categorical dismissals) vs Subjective ("I see things differently")
+  - Escalatory: "you're wrong", "this is complete nonsense", "that's ridiculous" — absolute verdicts that shut down dialogue
+  - Non-escalatory: "I disagree", "I see it differently", "I don't think that's right because X" — subjective, open to discussion
+  - KEY: Absolute dismissals of a person's contribution ("this is nonsense/garbage/absurd") are cognitive escalation even when they don't directly attack the person — they reject and push away rather than engage
+- Emotional: Blame ("you're making me sick") vs Self-accountability ("I feel frustrated")
+  - KEY: Blame disguised as self-expression is still emotional escalation. "I feel that without you I could feel safe here" uses "I feel" language but the message is "you are the problem" — detect the content, not just the framing.
+  - Escalatory: "Without you I could feel safe here", "I feel sick because of what you do", "I feel helpless because of people like you"
+  - Non-escalatory: "I feel helpless in this situation", "I feel frustrated by what's happening" — genuine self-expression with no blame attribution
+
+INDIRECT ESCALATION — RHETORICAL DEVICES (CRITICAL):
+Sarcasm, irony, cynicism, and rhetorical questions are escalation vehicles — sometimes more cutting than direct insults because they are harder to counter. Detect them even when no explicit profanity or direct attack is present.
+- Cynical sarcasm: "Sometimes I wonder whether Bibi's tongue could find an even deeper spot up Trump's ass" — the wondering is not genuine; it's a contemptuous rhetorical device
+- Rhetorical questions used to demean: "Do you seriously have nothing better to do ALL DAY? Is there NO ONE who loves you?" — not genuine questions, they are attacks framed as curiosity
+- Irony/mockery: praising someone in a way that is clearly contemptuous ("Wow, what a brilliant idea...")
+- These are escalatory even when the surface language appears calm or indirect
+- Preserve and treat these as part of the escalation type (cognitive, emotional, or both)
+
+CRITICAL DISTINCTION — Sarcasm as weapon vs. Sarcasm as political satire:
+Not all sarcasm is escalatory. The key question is: what is the sarcasm directed at?
+- ESCALATORY — Sarcasm as weapon: directed at a specific person or group to demean, mock, or humiliate them. ("What happened Bibi? No voters in Haifa?", "Sometimes I wonder how deep Bibi's tongue goes up Trump's ass")
+- NOT ESCALATORY — Sarcasm as political satire: directed at a policy, institution, or systemic failure — not at a person's character. ("Americans still have a lot to learn from us — abandon soldiers for two years, curse those who protest for their release..." — this critiques government policy through bitter irony, not a person)
+- Ask: is the TARGET a person/group (escalatory) or a policy/situation/institution (not escalatory)?
+- Ask: is the PURPOSE to humiliate someone, or to expose a systemic hypocrisy or failure?
+
+CONTEXT AWARENESS (CRITICAL):
+When context is provided, analyze:
+1. What relationships/figures are mentioned (e.g., Netanyahu-Trump relationship)
+2. Whether the text is legitimate political discourse or gratuitous escalation
+3. How context affects the analysis (e.g., criticizing documented actions vs personal attacks)
+Distinguish legitimate criticism from gratuitous attacks based on context.
+
+GROUP-BASED STEREOTYPES (CRITICAL):
+Treat stereotype-based labeling/generalization as escalation — this is not only about direct attacks on a group.
+- If text attacks, dismisses, or demeans a group identity (political, ethnic, religious, gender, location, lifestyle, appearance, etc.), mark this as escalatory.
+- Examples include (not exhaustive): "lefties/righties", "Israelis", "Tel Avivians", "vegans", "rednecks", "Black people", "religious/ultra-orthodox", "blonds/redheads", "women/men".
+- IMPORTANT: Jokes and humor that rely on a derogatory group stereotype are also escalatory — the humorous framing does not neutralize the stereotype. A joke about women not knowing how to drive, blondes being stupid, or Black people being criminals is both a stereotype AND a form of us-vs-them positioning (elevating the joke-teller's group by demeaning another).
+- Distinguish between:
+  - Legitimate critique of ideas/actions/policies (can be non-escalatory)
+  - Blanket claims, derogatory stereotypes, or stereotype-based humor about groups (escalatory)
+
+US-VS-THEM FRAMING (CRITICAL):
+In-group/out-group framing that implicitly or explicitly portrays the out-group as inferior, destructive, or illegitimate is cognitive escalation — even when stated calmly and without profanity.
+- "We are patriots / you don't care about this country" → escalatory
+- "We follow values / you have abandoned them" → escalatory
+- Repeated "you" (or "אתם") accusations contrasted with an implied virtuous "we" → escalatory
+- Categorical claims about what all members of a group are, believe, or want → escalatory
+- Distinguish from: factual comparisons of positions or policies between groups (non-escalatory)
 
 CONTEXT: {CONTEXT}
 TEXT: "{TEXT}"
 
 TASK: The input text is ALREADY escalatory. You MUST provide an EVEN MORE escalated version.
+Always respond in the same language as the input text.
 - Preserve the user's tone of voice but amplify it (same person, higher volume)
 - If the text is primarily cognitive → add emotional charge, or vice versa
 - Combine emotional and cognitive escalation if it strengthens the message
@@ -195,23 +296,29 @@ ESCALATION AMPLIFICATION PRINCIPLES:
 - What is the substantive claim/position? (PRESERVE AND STRENGTHEN)
 - What is the underlying feeling? (AMPLIFY)
 - What specific facts/policies are referenced? (PRESERVE AND MAKE MORE DIRECT)
+- What rhetorical device is being used — sarcasm, irony, cynicism, rhetorical question? (PRESERVE AND SHARPEN — never flatten into a direct statement)
 
-2. TRANSFORMATION (MAKE EVEN MORE IMPACTFUL):
-- Strong → Stronger ("You're wrong" → "You're completely delusional")
-- Blame → More direct blame ("You're annoying" → "You're insufferable")
-- Categorical → More absolute ("That's stupid" → "That's idiotic and everyone knows it")
-- Add conviction, directness, and intensity
-- Use stronger language - elevate to the next level
+2. TRANSFORMATION (PROPORTIONAL AMPLIFICATION):
+Amplify by ONE level relative to the input — do not jump from mild to extreme.
+- Mild escalation → Moderate escalation ("This is nonsense" → "This is completely absurd")
+- Moderate escalation → Strong escalation ("You're wrong about everything" → "You're completely wrong and it's embarrassing")
+- Strong escalation → Very strong escalation ("You're making me sick" → "You make me physically ill with your nonsense")
+- Add conviction, directness, and intensity — but proportional to where the input already sits
+- Use stronger language — elevate by one step, not ten
 
-3. CRITICAL: Output must feel like the SAME PERSON expressing the SAME IDEA, just louder and more direct.
+3. CRITICAL: Output must feel like the SAME PERSON expressing the SAME IDEA, just louder and more direct — never a different person with a different rage level.
 
-GOOD Examples (amplifying already-escalatory text):
-- "You're wrong about everything" → "You're completely delusional and wrong about everything"
-- "You're making me sick" → "You make me physically ill with your nonsense"
-- "You lefties have no idea" → "You lefties are clueless and have no idea what you're talking about"
-- "This policy is terrible" → "This policy is fucking disgraceful and harms real people"
-- "Their relationship is just political theater" → "Their relationship is a disgusting charade of political theater"
-- "That's a stupid argument" → "That's the most ridiculous, idiotic argument I've ever heard"
+GOOD Examples (proportional amplification):
+- "This is nonsense" [mild] → "This is completely absurd" [moderate] ✅
+- "You're wrong about everything" [moderate] → "You're completely wrong and it's embarrassing to watch" [strong] ✅
+- "You're making me sick" [strong] → "You make me physically ill with your nonsense" [very strong] ✅
+- "You lefties have no idea" [moderate] → "You lefties are utterly clueless and it shows" [strong] ✅
+- "This policy is terrible" [moderate] → "This policy is disgraceful and causes real harm" [strong] ✅
+- "That's a stupid argument" [moderate] → "That's the most intellectually dishonest argument I've heard" [strong] ✅
+
+BAD Examples (disproportionate — AVOID):
+- "This is a bit wrong" [mild] → "You're a delusional idiot" [extreme] ❌ PROBLEM: Jumped too many levels
+- "I disagree with this" [mild] → "This is fucking garbage and you know it" [extreme] ❌ PROBLEM: Disproportionate amplification
 
 OUTPUT (JSON only):
 {
@@ -221,7 +328,13 @@ OUTPUT (JSON only):
   "why": {
     "cognitiveDimension": "<brief analysis>",
     "emotionalDimension": "<brief analysis>",
-    "keyLinguisticCues": ["<cue1>", "<cue2>"]
+    "keyLinguisticCues": ["<cue1>", "<cue2>"],
+    "contextUnderstanding": {
+      "detectedContext": "<what context was identified - original post topic, figures mentioned, relationships, etc., or 'No context provided'>",
+      "identifiedRelationships": "<relationships or dynamics identified (e.g., 'Netanyahu-Trump relationship', 'political leader-follower dynamic') or 'None identified'>",
+      "contextualRelevance": "<how context affects escalation analysis - did it help distinguish legitimate discourse from gratuitous escalation?>",
+      "contextSufficiency": "<whether context was sufficient to understand the bigger picture or insufficient>"
+    }
   },
   "rephrasedText": "<even more escalated version>",
   "suggestions": null
