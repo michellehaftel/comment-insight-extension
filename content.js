@@ -1878,25 +1878,7 @@ function replaceTextViaExecCommand(element, text) {
             // Ensure focus is maintained
             element.focus({ preventScroll: true });
             
-            // Trigger additional events to "wake up" the editor's deletion handlers
-            // Simulate a keypress event to ensure editor recognizes it's in edit mode
-            const keyDownEvent = new KeyboardEvent('keydown', {
-              bubbles: true,
-              cancelable: true,
-              key: 'a',
-              code: 'KeyA'
-            });
-            element.dispatchEvent(keyDownEvent);
-            
-            const keyUpEvent = new KeyboardEvent('keyup', {
-              bubbles: true,
-              cancelable: true,
-              key: 'a',
-              code: 'KeyA'
-            });
-            element.dispatchEvent(keyUpEvent);
-            
-            console.log("✅ Cursor positioned and editor events triggered");
+            console.log("✅ Cursor positioned");
           }
           element.focus({ preventScroll: true });
         } catch (e) {
