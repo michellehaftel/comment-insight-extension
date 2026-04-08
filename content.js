@@ -2668,9 +2668,12 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     buttonInDOM: rephraseBtn ? rephraseBtn.isConnected : false
   });
 
-  // Log at most ONE pending row per post: if we already have an outstanding pending row, reuse it (no new sheet row).
+  // Log at most ONE pending row per post: if we already have an outstanding pending row
+  // AND no decision has been made yet (no dismiss/accept), reuse it (no new sheet row).
+  // After dismiss or accept, treat the next tooltip as a fresh interaction.
   const rephraseForLog = (rephrasedText && typeof rephrasedText === 'string') ? rephrasedText : '';
-  const alreadyHavePending = lastLoggedInteraction?.interactionId != null;
+  const alreadyHavePending = lastLoggedInteraction?.interactionId != null &&
+    !lastLoggedInteraction?.didUserAccept;
 
   if (alreadyHavePending) {
     // Same composer session – just update in-memory state; do NOT append another row
