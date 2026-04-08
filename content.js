@@ -124,9 +124,25 @@ function getPostContext() {
     originalPostWriter = 'new';
   }
   
+  // Clean UI noise from captured tweet text before returning
+  if (originalPostContent && originalPostContent !== 'new') {
+    originalPostContent = originalPostContent
+      .replace(/Translated from \w+/gi, '')
+      .replace(/Show original/gi, '')
+      .replace(/Pinned/gi, '')
+      .replace(/·\s*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+/gi, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  }
+
+  if (originalPostWriter && originalPostWriter !== 'new') {
+    // Keep only the first line (display name), drop handle/metadata noise
+    originalPostWriter = originalPostWriter.split('\n')[0].trim();
+  }
+
   return {
-    originalPostContent: originalPostContent ? originalPostContent.substring(0, 500) : 'new',
-    originalPostWriter: originalPostWriter ? originalPostWriter.substring(0, 100) : 'new',
+    originalPostContent: originalPostContent ? originalPostContent.substring(0, 280) : 'new',
+    originalPostWriter: originalPostWriter ? originalPostWriter.substring(0, 60) : 'new',
     isReply: isReply
   };
 }
