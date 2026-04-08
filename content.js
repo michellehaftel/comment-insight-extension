@@ -2000,45 +2000,7 @@ function replaceTextInElement(element, newText) {
                   }
                 }
                 
-                // CRITICAL: Trigger a mock backspace keydown event (cancelled)
-                // This helps Twitter's editor recognize that deletion is enabled
-                // We cancel it so it doesn't actually delete anything
-                const backspaceDown = new KeyboardEvent('keydown', {
-                  bubbles: true,
-                  cancelable: true,
-                  key: 'Backspace',
-                  code: 'Backspace',
-                  keyCode: 8,
-                  which: 8
-                });
-                
-                // Add a listener to prevent actual deletion
-                const preventDelete = (e) => {
-                  if (e.key === 'Backspace') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }
-                };
-                element.addEventListener('keydown', preventDelete, { once: true, capture: true });
-                element.dispatchEvent(backspaceDown);
-                
-                // Also trigger keyup
-                setTimeout(() => {
-                  const backspaceUp = new KeyboardEvent('keyup', {
-                    bubbles: true,
-                    cancelable: true,
-                    key: 'Backspace',
-                    code: 'Backspace',
-                    keyCode: 8,
-                    which: 8
-                  });
-                  element.dispatchEvent(backspaceUp);
-                  
-                  // Remove the prevent listener
-                  element.removeEventListener('keydown', preventDelete, { capture: true });
-                  
-                  console.log("✅ Twitter editor deletion handlers initialized");
-                }, 10);
+                console.log("✅ Twitter editor ready for editing");
               }, 100);
             } else {
               console.warn("⚠️ Twitter composer verification mismatch, retrying...");
