@@ -1776,106 +1776,30 @@ async function rephraseForDeEscalation(text, botType = 'angel') {
   return null;
 }
 
-// Replace text using the most reliable method for each platform.
-// PRIMARY: ClipboardEvent('paste') — Lexical handles paste natively so its
-//   internal state stays in sync with the DOM, enabling deletion after rephrase.
-// FALLBACK: execCommand insertText if paste is not handled by the editor.
+// Replace text in a Lexical/contenteditable editor using execCommand.
+// execCommand('insertText') fires trusted beforeinput + input events that
+// Lexical processes natively — no post-processing needed.
 function replaceTextViaExecCommand(element, text) {
-  console.log("🔧 replaceTextViaExecCommand called with:", {
-    elementTag: element?.tagName,
-    textLength: text?.length,
-    textPreview: text?.substring(0, 50)
-  });
-
-  if (!element) {
-    console.error("❌ No element provided to replaceTextViaExecCommand");
-    return false;
-  }
+  if (!element) return false;
 
   element.focus({ preventScroll: true });
 
-  // Helper: place cursor at end of element
-  function positionCursorAtEnd() {
-    try {
-      const sel = window.getSelection();
-      if (!sel) return;
-      const r = document.createRange();
-      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null);
-      let last = null, node;
-      while ((node = walker.nextNode())) last = node;
-      if (last && last.nodeType === Node.TEXT_NODE) {
-        const len = last.textContent?.length || 0;
-        r.setStart(last, len);
-        r.setEnd(last, len);
-      } else {
-        r.selectNodeContents(element);
-        r.collapse(false);
-      }
-      sel.removeAllRanges();
-      sel.addRange(r);
-      element.focus({ preventScroll: true });
-    } catch (e) {
-      console.warn("Could not position cursor:", e);
-      element.focus({ preventScroll: true });
-    }
-  }
-
   try {
-    // ── STEP 1: Select all existing content ──────────────────────────────────
     const selection = window.getSelection();
-    if (!selection) {
-      console.error("❌ No selection object available");
-      return false;
-    }
+    if (!selection) return false;
+
+    // Select all existing content via Range API
     selection.removeAllRanges();
     const range = document.createRange();
     range.selectNodeContents(element);
     selection.addRange(range);
 
-    // ── PRIMARY: paste event ─────────────────────────────────────────────────
-    // Lexical's paste handler replaces the current selection with clipboard
-    // text and updates its internal node tree, so backspace/delete work after.
-    const clipboardData = new DataTransfer();
-    clipboardData.setData('text/plain', text);
-    const pasteEvent = new ClipboardEvent('paste', {
-      bubbles: true,
-      cancelable: true,
-      clipboardData: clipboardData
-    });
-    element.dispatchEvent(pasteEvent);
-
-    // Give Lexical a tick to process the paste
-    setTimeout(() => {
-      const current = getTextContent(element).trim();
-      if (current === text.trim()) {
-        console.log("✅ Text replaced via paste event");
-        positionCursorAtEnd();
-        return;
-      }
-
-      // ── FALLBACK: execCommand ──────────────────────────────────────────────
-      // Use Range API selection + single insertText (avoids selectAll/delete
-      // which are global and confuse Lexical's internal state).
-      console.log("ℹ️ Paste not handled, falling back to execCommand");
-      selection.removeAllRanges();
-      const r2 = document.createRange();
-      r2.selectNodeContents(element);
-      selection.addRange(r2);
-
-      // insertText with an active selection replaces the selection with the new
-      // text. This fires trusted beforeinput/input events that Lexical processes
-      // natively, keeping its internal state in sync with the DOM.
-      const ok = document.execCommand('insertText', false, text);
-      console.log("📍 execCommand('insertText'):", ok);
-
-      if (ok) {
-        console.log("✅ Text replaced via execCommand fallback");
-      }
-
-      setTimeout(positionCursorAtEnd, 30);
-    }, 40);
-
-    return true;
+    // Replace selection with new text.
+    // This fires trusted beforeinput/input events → Lexical updates its
+    // internal state correctly → both add and delete work afterwards.
+    const ok = document.execCommand('insertText', false, text);
+    console.log(ok ? "✅ replaceTextViaExecCommand: text replaced" : "⚠️ replaceTextViaExecCommand: insertText returned false");
+    return ok;
   } catch (e) {
     console.error("replaceTextViaExecCommand failed:", e);
     return false;
@@ -1914,118 +1838,12 @@ function replaceTextInElement(element, newText) {
     } else if (element.contentEditable === 'true' || element.getAttribute('role') === 'textbox') {
       element.focus?.({ preventScroll: true });
       
-      // For Twitter/X, ALWAYS use execCommand as it preserves editor functionality
-      // (including deletion support)
+      // For Twitter/X use execCommand — fires trusted events Lexical handles natively.
+      // No post-processing: any attribute/focus manipulation after insertion
+      // triggers Lexical's MutationObserver and resets editor state.
       if (isTwitter()) {
-        console.log("Twitter/X composer detected → using execCommand for editor compatibility");
-        console.log("🔍 Current text in element:", getTextContent(element).substring(0, 50));
-        console.log("🔍 New text to insert:", newText.substring(0, 50));
-        
-        // Store reference to element for post-processing
-        const twitterElement = element;
-        
-        const success = replaceTextViaExecCommand(element, newText);
-        
-        console.log("🔍 replaceTextViaExecCommand returned:", success);
-        if (success) {
-          setTimeout(() => {
-            const verifyText = getTextContent(element);
-            if (verifyText.trim() === newText.trim() || verifyText.includes(newText.substring(0, Math.min(newText.length, 15)))) {
-              console.log("✅ Twitter composer updated successfully");
-              
-              // Ensure editability is maintained
-              if (wasContentEditable === 'true') {
-                element.contentEditable = 'true';
-                element.setAttribute('contenteditable', 'true');
-              }
-              // Restore other attributes
-              if (originalRole) {
-                element.setAttribute('role', originalRole);
-              }
-              element.removeAttribute('readonly');
-              element.removeAttribute('disabled');
-              
-              // CRITICAL: Additional event triggers to ensure deletion works
-              // Twitter's editor may need these to properly initialize deletion handlers
-              setTimeout(() => {
-                // Ensure element is still editable
-                if (wasContentEditable === 'true') {
-                  element.contentEditable = 'true';
-                  element.setAttribute('contenteditable', 'true');
-                }
-                element.removeAttribute('readonly');
-                element.removeAttribute('disabled');
-                
-                // Focus the element
-                element.focus({ preventScroll: true });
-                
-                // Trigger focus event to ensure editor recognizes focus
-                const focusEvent = new FocusEvent('focus', {
-                  bubbles: true,
-                  cancelable: true,
-                  view: window
-                });
-                element.dispatchEvent(focusEvent);
-                
-                // Ensure selection is properly set at the end
-                const sel = window.getSelection();
-                if (sel && element) {
-                  try {
-                    const range = document.createRange();
-                    const walker = document.createTreeWalker(
-                      element,
-                      NodeFilter.SHOW_TEXT,
-                      null
-                    );
-                    
-                    let lastTextNode = null;
-                    let node;
-                    while (node = walker.nextNode()) {
-                      lastTextNode = node;
-                    }
-                    
-                    if (lastTextNode) {
-                      const len = lastTextNode.textContent?.length || 0;
-                      range.setStart(lastTextNode, len);
-                      range.setEnd(lastTextNode, len);
-                    } else {
-                      range.selectNodeContents(element);
-                      range.collapse(false);
-                    }
-                    
-                    sel.removeAllRanges();
-                    sel.addRange(range);
-                  } catch (e) {
-                    console.warn("Could not set selection:", e);
-                  }
-                }
-                
-                console.log("✅ Twitter editor ready for editing");
-              }, 100);
-            } else {
-              console.warn("⚠️ Twitter composer verification mismatch, retrying...");
-              // Retry once more
-              setTimeout(() => {
-                const retrySuccess = replaceTextViaExecCommand(element, newText);
-                if (!retrySuccess) {
-                  console.error("⚠️ execCommand retry failed, Twitter editor may have compatibility issues");
-                }
-              }, 200);
-            }
-          }, 150);
-          return success;
-        } else {
-          // If execCommand failed, try again with a delay
-          console.log("⚠️ Initial execCommand failed, retrying...");
-          setTimeout(() => {
-            const retrySuccess = replaceTextViaExecCommand(element, newText);
-            if (retrySuccess) {
-              console.log("✅ Retry succeeded");
-            }
-          }, 100);
-          // Still return false to try other methods
-          return false;
-        }
+        console.log("Twitter/X composer → execCommand");
+        return replaceTextViaExecCommand(element, newText);
       }
       
       // Ensure the full content is selected before replacement
