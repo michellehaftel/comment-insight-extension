@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html>
+<html dir="rtl" lang="he">
 <head>
   <meta charset="UTF-8">
-  <title>Discourse Lab - Welcome</title>
+  <title>Discourse Lab - ברוכים הבאים</title>
   <style>
     * {
       box-sizing: border-box;
@@ -87,6 +87,7 @@
       transition: all 0.15s;
       background: #ffffff;
       color: #09090b;
+      text-align: right;
     }
 
     select:focus, input[type="number"]:focus, input[type="text"]:focus {
@@ -94,7 +95,7 @@
       border-color: #9333ea;
       box-shadow: 0 0 0 3px rgba(147, 51, 234, 0.1);
     }
-    
+
     select:focus option:checked {
       background: #9333ea;
       color: #ffffff;
@@ -170,89 +171,133 @@
 <body>
   <div class="container">
     <div class="emoji">🕊️</div>
-    <h1>Welcome to Discourse Lab</h1>
+    <h1>ברוכים הבאים ל-Discourse Lab</h1>
     <p class="subtitle">
-      Help us understand online discourse better! This extension will help you communicate more constructively while anonymously contributing to research.
+      עזרו לנו להבין טוב יותר את השיח המקוון! התוסף יעזור לכם לתקשר בצורה בונה יותר, תוך תרומה אנונימית למחקר.
     </p>
 
     <form id="onboardingForm">
       <div class="form-group">
-        <label for="gender">Gender</label>
+        <label for="gender">מגדר</label>
         <select id="gender" name="gender" required>
-          <option value="">Select your gender</option>
-          <option value="male">Male</option>
-          <option value="female">Female</option>
-          <option value="non-binary">Non-binary</option>
-          <option value="prefer-not-to-say">Prefer not to say</option>
-          <option value="other">Other</option>
+          <option value="">בחרו מגדר</option>
+          <option value="male">זכר</option>
+          <option value="female">נקבה</option>
+          <option value="non-binary">לא-בינארי/ת</option>
+          <option value="prefer-not-to-say">מעדיף/ה לא לציין</option>
+          <option value="other">אחר</option>
         </select>
-        <div class="error-message" id="genderError">Please select your gender</div>
+        <div class="error-message" id="genderError">נא לבחור מגדר</div>
       </div>
 
       <div class="form-group">
-        <label for="age">Age</label>
-        <input 
-          type="number" 
-          id="age" 
-          name="age" 
-          min="13" 
-          max="120" 
-          placeholder="Enter your age"
+        <label for="age">גיל</label>
+        <input
+          type="number"
+          id="age"
+          name="age"
+          min="13"
+          max="120"
+          placeholder="הכניסו את גילכם"
           required
         >
-        <div class="error-message" id="ageError">Please enter a valid age (13-120)</div>
+        <div class="error-message" id="ageError">נא להכניס גיל תקין (13–120)</div>
       </div>
 
       <div class="form-group">
-        <label for="sector">Sector</label>
+        <label for="sector">מגזר</label>
         <select id="sector" name="sector" required>
-          <option value="">Select your sector</option>
-          <option value="secular">Secular</option>
-          <option value="traditional">Traditional</option>
-          <option value="religious-zionist">Religious Zionist</option>
-          <option value="ultra-orthodox">Ultra-Orthodox</option>
-          <option value="arab">Arab</option>
-          <option value="druze">Druze</option>
-          <option value="christian">Christian</option>
-          <option value="other">Other</option>
-          <option value="prefer-not-to-say">Prefer not to say</option>
+          <option value="">בחרו מגזר</option>
+          <option value="secular">חילוני/ת</option>
+          <option value="traditional">מסורתי/ת</option>
+          <option value="religious-zionist">דתי/ה לאומי/ת</option>
+          <option value="ultra-orthodox">חרדי/ת</option>
+          <option value="arab">ערבי/ת</option>
+          <option value="druze">דרוזי/ת</option>
+          <option value="christian">נוצרי/ת</option>
+          <option value="other">אחר/ת</option>
+          <option value="prefer-not-to-say">מעדיף/ה לא לציין</option>
         </select>
-        <div class="error-message" id="sectorError">Please select your sector</div>
+        <div class="error-message" id="sectorError">נא לבחור מגזר</div>
       </div>
 
       <div class="form-group">
-        <label for="country">Country</label>
-        <select id="country" name="country" required>
-          <option value="">Select your country</option>
+        <label for="city">עיר</label>
+        <select id="city" name="city" required>
+          <option value="">בחרו עיר</option>
+          <option value="ירושלים">ירושלים</option>
+          <option value="תל אביב-יפו">תל אביב-יפו</option>
+          <option value="חיפה">חיפה</option>
+          <option value="ראשון לציון">ראשון לציון</option>
+          <option value="פתח תקווה">פתח תקווה</option>
+          <option value="אשדוד">אשדוד</option>
+          <option value="נתניה">נתניה</option>
+          <option value="באר שבע">באר שבע</option>
+          <option value="בני ברק">בני ברק</option>
+          <option value="רמת גן">רמת גן</option>
+          <option value="בת ים">בת ים</option>
+          <option value="חולון">חולון</option>
+          <option value="רחובות">רחובות</option>
+          <option value="הרצליה">הרצליה</option>
+          <option value="כפר סבא">כפר סבא</option>
+          <option value="מודיעין-מכבים-רעות">מודיעין-מכבים-רעות</option>
+          <option value="אשקלון">אשקלון</option>
+          <option value="חדרה">חדרה</option>
+          <option value="נצרת">נצרת</option>
+          <option value="נהריה">נהריה</option>
+          <option value="לוד">לוד</option>
+          <option value="רמלה">רמלה</option>
+          <option value="עפולה">עפולה</option>
+          <option value="הוד השרון">הוד השרון</option>
+          <option value="גבעתיים">גבעתיים</option>
+          <option value="קריית אתא">קריית אתא</option>
+          <option value="קריית גת">קריית גת</option>
+          <option value="אילת">אילת</option>
+          <option value="צפת">צפת</option>
+          <option value="טבריה">טבריה</option>
+          <option value="יבנה">יבנה</option>
+          <option value="אלעד">אלעד</option>
+          <option value="בית שמש">בית שמש</option>
+          <option value="ביתר עילית">ביתר עילית</option>
+          <option value="מודיעין עילית">מודיעין עילית</option>
+          <option value="מעלה אדומים">מעלה אדומים</option>
+          <option value="ראש העין">ראש העין</option>
+          <option value="קריית מוצקין">קריית מוצקין</option>
+          <option value="קריית ביאליק">קריית ביאליק</option>
+          <option value="קריית ים">קריית ים</option>
+          <option value="כרמיאל">כרמיאל</option>
+          <option value="נס ציונה">נס ציונה</option>
+          <option value="אור יהודה">אור יהודה</option>
+          <option value="קריית שמונה">קריית שמונה</option>
+          <option value="שוהם">שוהם</option>
+          <option value="נתיבות">נתיבות</option>
+          <option value="דימונה">דימונה</option>
+          <option value="שדרות">שדרות</option>
+          <option value="יהוד-מונוסון">יהוד-מונוסון</option>
+          <option value="זכרון יעקב">זכרון יעקב</option>
+          <option value="אום אל-פחם">אום אל-פחם</option>
+          <option value="טמרה">טמרה</option>
+          <option value="סח'נין">סח'נין</option>
+          <option value="שפרעם">שפרעם</option>
+          <option value="באקה אל-גרביה">באקה אל-גרביה</option>
+          <option value="רהט">רהט</option>
+          <option value="ערד">ערד</option>
+          <option value="אחר">אחר</option>
         </select>
-        <div class="error-message" id="countryError">Please select your country</div>
-      </div>
-
-      <div class="form-group">
-        <label for="city">City</label>
-        <input 
-          type="text" 
-          id="city" 
-          name="city" 
-          placeholder="Enter your city"
-          required
-        >
-        <div class="error-message" id="cityError">Please enter your city</div>
+        <div class="error-message" id="cityError">נא לבחור עיר</div>
       </div>
 
       <div class="privacy-note">
-        <strong>🔒 Your Privacy Matters</strong><br>
-        Your responses are used for research purposes only. All data is stored anonymously and will be used to study online communication patterns.
+        <strong>🔒 הפרטיות שלכם חשובה לנו</strong><br>
+        התשובות שלכם משמשות למחקר בלבד. כל הנתונים נשמרים באופן אנונימי וישמשו לחקר דפוסי תקשורת מקוונת.
       </div>
 
       <div class="button-container">
-        <button type="submit" id="submitBtn">Get Started</button>
+        <button type="submit" id="submitBtn">בואו נתחיל</button>
       </div>
     </form>
   </div>
 
-  <script src="countries.js"></script>
   <script src="onboarding.js"></script>
 </body>
 </html>
-
