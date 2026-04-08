@@ -685,10 +685,16 @@ function isEscalating(text) {
     }
   });
 
-  // Group-stereotype question patterns (e.g., "Why do women always behave this way?")
+  // Group-stereotype patterns — group name used as subject + absolute claim
+  // Covers: "Why do women always...", "Leftists always destroy...", "Women never listen..."
+  const GROUP_NAMES = '(?:women|men|girls|boys|vegans?|rednecks?|blonds?|blondes?|redheads?|lefties?|righties?|leftists?|rightists?|liberals?|conservatives?|republicans?|democrats?|libs?|israelis?|palestinians?|jews?|arabs?|religious|ultra-orthodox|ultraorthodox|black people|white people|asian people|settlers?|zionists?|orthodox)';
   const stereotypeQuestionPatterns = [
-    /\bwhy do (?:women|men|girls|boys|vegans?|rednecks?|blonds?|blondes?|redheads?|lefties?|righties?|israelis|palestinians|jews|arabs|religious|ultra-orthodox|ultraorthodox|black people|white people|asian people) always\b/i,
-    /\b(?:women|men|girls|boys|vegans?|rednecks?|blonds?|blondes?|redheads?|lefties?|righties?|israelis|palestinians|jews|arabs|religious|ultra-orthodox|ultraorthodox|black people|white people|asian people) always (?:behave|act|think|do|say)\b/i
+    // "Why do [group] always..."
+    new RegExp(`\\bwhy do ${GROUP_NAMES} always\\b`, 'i'),
+    // "[Group] always/never [any verb]" — group as subject + absolute temporal qualifier
+    new RegExp(`\\b${GROUP_NAMES} (?:always|never) \\w`, 'i'),
+    // "[Group] [verb] everything/nothing/everyone/all..."
+    new RegExp(`\\b${GROUP_NAMES} (?:\\w+ )?(?:everything|nothing|everyone|everybody|all of|none of)\\b`, 'i'),
   ];
 
   stereotypeQuestionPatterns.forEach(pattern => {
@@ -709,6 +715,12 @@ function isEscalating(text) {
   if (onceAlwaysPattern.test(trimmedText)) {
     escalationScore += 2.5;
     reasons.push("Categorical absolutist pattern (once X, always X)");
+  }
+
+  // "without exception" / "no exceptions" — explicit absolute dismissal of nuance
+  if (/\bwithout exception\b/i.test(trimmedText) || /\bno exceptions?\b/i.test(trimmedText)) {
+    escalationScore += 1.5;
+    reasons.push("Absolute qualifier (without exception)");
   }
   
   // Catch "only [verb]" categorical patterns (e.g., "only cares about", "only wants", "only thinks about")
@@ -1842,24 +1854,21 @@ function replaceTextViaExecCommand(element, text) {
       }
 
       // ── FALLBACK: execCommand ──────────────────────────────────────────────
+      // Use Range API selection + single insertText (avoids selectAll/delete
+      // which are global and confuse Lexical's internal state).
       console.log("ℹ️ Paste not handled, falling back to execCommand");
       selection.removeAllRanges();
       const r2 = document.createRange();
       r2.selectNodeContents(element);
       selection.addRange(r2);
 
-      document.execCommand('selectAll', false, null);
-      document.execCommand('delete', false, null);
+      // insertText with an active selection replaces the selection with the new
+      // text. This fires trusted beforeinput/input events that Lexical processes
+      // natively, keeping its internal state in sync with the DOM.
       const ok = document.execCommand('insertText', false, text);
       console.log("📍 execCommand('insertText'):", ok);
 
       if (ok) {
-        // Fire a single input event so Lexical reconciles its internal state
-        element.dispatchEvent(new InputEvent('input', {
-          bubbles: true,
-          cancelable: false,
-          inputType: 'insertFromPaste',
-        }));
         console.log("✅ Text replaced via execCommand fallback");
       }
 
