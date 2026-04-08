@@ -1764,134 +1764,109 @@ async function rephraseForDeEscalation(text, botType = 'angel') {
   return null;
 }
 
-// Replace text using the most reliable method for each platform
-// Uses execCommand which preserves editor functionality (including deletion)
+// Replace text using the most reliable method for each platform.
+// PRIMARY: ClipboardEvent('paste') — Lexical handles paste natively so its
+//   internal state stays in sync with the DOM, enabling deletion after rephrase.
+// FALLBACK: execCommand insertText if paste is not handled by the editor.
 function replaceTextViaExecCommand(element, text) {
   console.log("🔧 replaceTextViaExecCommand called with:", {
     elementTag: element?.tagName,
     textLength: text?.length,
     textPreview: text?.substring(0, 50)
   });
-  
+
   if (!element) {
     console.error("❌ No element provided to replaceTextViaExecCommand");
     return false;
   }
-  
-  // Ensure element is focused and editable
+
   element.focus({ preventScroll: true });
-  console.log("📍 Element focused");
-  
+
+  // Helper: place cursor at end of element
+  function positionCursorAtEnd() {
+    try {
+      const sel = window.getSelection();
+      if (!sel) return;
+      const r = document.createRange();
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null);
+      let last = null, node;
+      while ((node = walker.nextNode())) last = node;
+      if (last && last.nodeType === Node.TEXT_NODE) {
+        const len = last.textContent?.length || 0;
+        r.setStart(last, len);
+        r.setEnd(last, len);
+      } else {
+        r.selectNodeContents(element);
+        r.collapse(false);
+      }
+      sel.removeAllRanges();
+      sel.addRange(r);
+      element.focus({ preventScroll: true });
+    } catch (e) {
+      console.warn("Could not position cursor:", e);
+      element.focus({ preventScroll: true });
+    }
+  }
+
   try {
+    // ── STEP 1: Select all existing content ──────────────────────────────────
     const selection = window.getSelection();
     if (!selection) {
       console.error("❌ No selection object available");
       return false;
     }
-    
-    // Clear any existing selection first
     selection.removeAllRanges();
-    console.log("📍 Selection cleared");
-    
-    // Select all content in the element
     const range = document.createRange();
-    try {
-      range.selectNodeContents(element);
-      selection.addRange(range);
-      console.log("📍 Selection range created and added");
-    } catch (e) {
-      console.warn("❌ Could not select node contents:", e);
-      return false;
-    }
-    
-    // Use execCommand to replace - this preserves editor structure
-    // First, select all (redundant but helps ensure selection)
-    const selectAllSuccess = document.execCommand('selectAll', false, null);
-    console.log("📍 execCommand('selectAll'):", selectAllSuccess);
-    
-    // Delete the selected content using 'delete' command
-    const deleteSuccess = document.execCommand('delete', false, null);
-    console.log("📍 execCommand('delete'):", deleteSuccess);
-    
-    // Insert the new text using insertText - this is key for editor compatibility
-    // insertText creates proper DOM structure that editors can work with
-    const insertSuccess = document.execCommand('insertText', false, text);
-    console.log("📍 execCommand('insertText'):", insertSuccess);
-    
-    if (insertSuccess) {
-      console.log("✅ Text replaced successfully via execCommand");
-      console.log("📍 Verification: element now contains:", getTextContent(element).substring(0, 50));
-      
-      // CRITICAL: Trigger events that editors need to recognize editing state
-      // These events ensure deletion will work
-      
-      // Trigger input event
-      const inputEvent = new InputEvent('input', {
-        bubbles: true,
-        cancelable: false,
-        inputType: 'insertText',
-        data: text
-      });
-      element.dispatchEvent(inputEvent);
-      
-      // Trigger beforeinput event
-      const beforeInputEvent = new InputEvent('beforeinput', {
-        bubbles: true,
-        cancelable: true,
-        inputType: 'insertText',
-        data: text
-      });
-      element.dispatchEvent(beforeInputEvent);
-      
-      // Position cursor at the end
-      setTimeout(() => {
-        try {
-          const finalSelection = window.getSelection();
-          if (finalSelection && element) {
-            const finalRange = document.createRange();
-            
-            // Try to find the last text node
-            const walker = document.createTreeWalker(
-              element,
-              NodeFilter.SHOW_TEXT,
-              null
-            );
-            
-            let lastTextNode = null;
-            let node;
-            while (node = walker.nextNode()) {
-              lastTextNode = node;
-            }
-            
-            if (lastTextNode && lastTextNode.nodeType === Node.TEXT_NODE) {
-              const len = lastTextNode.textContent?.length || 0;
-              finalRange.setStart(lastTextNode, len);
-              finalRange.setEnd(lastTextNode, len);
-            } else {
-              finalRange.selectNodeContents(element);
-              finalRange.collapse(false);
-            }
-            
-            finalSelection.removeAllRanges();
-            finalSelection.addRange(finalRange);
-            
-            // Ensure focus is maintained
-            element.focus({ preventScroll: true });
-            
-            console.log("✅ Cursor positioned");
-          }
-          element.focus({ preventScroll: true });
-        } catch (e) {
-          console.warn("Could not position cursor:", e);
-          element.focus({ preventScroll: true });
-        }
-      }, 30);
-      
-      return true;
-    }
-    
-    console.log("insertText command failed");
-    return false;
+    range.selectNodeContents(element);
+    selection.addRange(range);
+
+    // ── PRIMARY: paste event ─────────────────────────────────────────────────
+    // Lexical's paste handler replaces the current selection with clipboard
+    // text and updates its internal node tree, so backspace/delete work after.
+    const clipboardData = new DataTransfer();
+    clipboardData.setData('text/plain', text);
+    const pasteEvent = new ClipboardEvent('paste', {
+      bubbles: true,
+      cancelable: true,
+      clipboardData: clipboardData
+    });
+    element.dispatchEvent(pasteEvent);
+
+    // Give Lexical a tick to process the paste
+    setTimeout(() => {
+      const current = getTextContent(element).trim();
+      if (current === text.trim()) {
+        console.log("✅ Text replaced via paste event");
+        positionCursorAtEnd();
+        return;
+      }
+
+      // ── FALLBACK: execCommand ──────────────────────────────────────────────
+      console.log("ℹ️ Paste not handled, falling back to execCommand");
+      selection.removeAllRanges();
+      const r2 = document.createRange();
+      r2.selectNodeContents(element);
+      selection.addRange(r2);
+
+      document.execCommand('selectAll', false, null);
+      document.execCommand('delete', false, null);
+      const ok = document.execCommand('insertText', false, text);
+      console.log("📍 execCommand('insertText'):", ok);
+
+      if (ok) {
+        // Fire a single input event so Lexical reconciles its internal state
+        element.dispatchEvent(new InputEvent('input', {
+          bubbles: true,
+          cancelable: false,
+          inputType: 'insertFromPaste',
+        }));
+        console.log("✅ Text replaced via execCommand fallback");
+      }
+
+      setTimeout(positionCursorAtEnd, 30);
+    }, 40);
+
+    return true;
   } catch (e) {
     console.error("replaceTextViaExecCommand failed:", e);
     return false;
