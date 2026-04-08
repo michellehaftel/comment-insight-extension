@@ -166,15 +166,70 @@
     .error-message.show {
       display: block;
     }
+
+    .exposition {
+      background: #f5f3ff;
+      border: 1px solid #e9d5ff;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .exposition p {
+      color: #3f3f46;
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .exposition strong {
+      color: #09090b;
+    }
+
+    .fine-print {
+      color: #71717a !important;
+      font-size: 12px !important;
+      border-top: 1px solid #e9d5ff;
+      padding-top: 10px;
+      margin-top: 2px;
+    }
+
+    .fine-print a {
+      color: #9333ea;
+      text-decoration: none;
+    }
+
+    .fine-print a:hover {
+      text-decoration: underline;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="emoji">🕊️</div>
     <h1>ברוכים הבאים ל-Discourse Lab</h1>
-    <p class="subtitle">
-      עזרו לנו להבין טוב יותר את השיח המקוון! התוסף יעזור לכם לתקשר בצורה בונה יותר, תוך תרומה אנונימית למחקר.
-    </p>
+    <div class="exposition">
+      <p>
+        אתם עומדים להשתתף במחקר אקדמי של <strong>מיכל הפטל</strong>, אוניברסיטת רייכמן
+        (כלכלה התנהגותית / HCI), שבוחן בחירות לשוניות בתוך שיח פוליטי ברשתות חברתיות.
+      </p>
+      <p>
+        המשיכו להשתמש ב-X/Twitter כרגיל — כתבו פוסטים ותגובות בכל נושא ובכל סגנון.
+        <strong>אין דרך נכונה או שגויה — חשוב שתהיו עצמכם.</strong>
+      </p>
+      <p>
+        בנסיבות מסוימות תופיע הצעה לניסוח מחודש של מה שכתבתם. הניסוחים תוכננו לעזור
+        לכם להביע את עצמכם בצורה אפקטיבית יותר —
+        <strong>נשמח אם תשקלו אותם ותאמצו אותם כשמרגיש נכון.</strong>
+        כמובן, הבחירה היא תמיד שלכם.
+      </p>
+      <p class="fine-print">
+        ההשתתפות וולונטרית לחלוטין וניתן להפסיק בכל עת על ידי הסרת התוסף.
+        לשאלות: <a href="mailto:michellehaf@gmail.com">michellehaf@gmail.com</a>
+      </p>
+    </div>
 
     <form id="onboardingForm">
       <div class="form-group">
