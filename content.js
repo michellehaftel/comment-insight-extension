@@ -1293,34 +1293,65 @@ async function checkForEscalation(element) {
     reasons: escalationResult.reasons
   });
   
-  // Different logic for angel vs devil bot
-  if (botType === 'angel') {
-    // Angel bot: Show tooltip when content IS escalatory (current behavior)
-    if (escalationResult.isEscalatory) {
-      console.log("🚨 Escalation detected - showing de-escalation tooltip (angel bot)");
-      console.log("📝 Requires API:", escalationResult.requiresAPI || false);
+  // Step 1: Decide if the text is escalatory.
+  // For Hebrew/non-Latin text the local detector always flags as escalatory (requiresAPI=true).
+  // In that case we ALWAYS use the angel-bot API call to make the escalation decision —
+  // angel returns null → NOT escalatory → no tooltip for anyone.
+  // angel returns a string → IS escalatory → show bot-appropriate tooltip.
+  // This ensures the same gate is used for both angel and devil.
+
+  if (!escalationResult.isEscalatory) {
+    // Local rules already say not escalatory — no tooltip regardless of bot type.
+    console.log("✅ No escalation detected - no tooltip needed");
+    const existingTooltip = document.querySelector(".escalation-tooltip");
+    if (existingTooltip) existingTooltip.remove();
+    justRephrased = false;
+    return;
+  }
+
+  console.log("🚨 Escalation detected. Bot:", botType, "| requiresAPI:", escalationResult.requiresAPI || false);
+
+  if (escalationResult.requiresAPI) {
+    // Use angel API to verify escalation (angel returns null = not escalatory).
+    console.log("⏳ Verifying escalation via angel API before showing tooltip...");
+    let angelRephrase;
+    try {
+      angelRephrase = await rephraseForDeEscalation(text, 'angel');
+    } catch (e) {
+      angelRephrase = undefined; // error → assume escalatory so user isn't silently dropped
+    }
+
+    if (angelRephrase === null) {
+      // API confirmed: NOT escalatory → suppress tooltip for both angel and devil
+      console.log("✅ API says not escalatory — suppressing tooltip");
+      const existingTooltip = document.querySelector(".escalation-tooltip");
+      if (existingTooltip) existingTooltip.remove();
+      justRephrased = false;
+      return;
+    }
+
+    // IS escalatory. Now get the bot-appropriate rephrase.
+    if (botType === 'angel') {
+      // Already have the angel rephrase from the verification call — reuse it.
+      createEscalationTooltip(text, element, escalationResult.escalationType, 'angel', angelRephrase);
+    } else {
+      // Devil bot: angel confirmed escalation; now fetch devil's escalating rephrase.
+      let devilRephrase;
+      try {
+        devilRephrase = await rephraseForDeEscalation(text, 'devil');
+      } catch (e) {
+        devilRephrase = undefined;
+      }
+      createEscalationTooltip(text, element, escalationResult.escalationType, 'devil', devilRephrase);
+    }
+  } else {
+    // Local rules detected escalation (English) — show bot-appropriate tooltip directly.
+    if (botType === 'angel') {
+      console.log("🚨 Showing de-escalation tooltip (angel bot)");
       createEscalationTooltip(text, element, escalationResult.escalationType, 'angel');
     } else {
-      console.log("✅ No escalation detected - no tooltip needed (angel bot)");
-      const existingTooltip = document.querySelector(".escalation-tooltip");
-      if (existingTooltip) {
-        existingTooltip.remove();
-      }
-      justRephrased = false;
-    }
-  } else if (botType === 'devil') {
-    // Devil bot: Same detection as Angel - trigger when content IS escalatory
-    // Then offer an EVEN MORE escalating rephrase (vs Angel which offers de-escalation)
-    if (escalationResult.isEscalatory) {
-      console.log("😈 Escalation detected - showing even-more-escalating tooltip (devil bot)");
+      console.log("😈 Showing escalation tooltip (devil bot)");
       createEscalationTooltip(text, element, escalationResult.escalationType, 'devil');
-    } else {
-      console.log("✅ No escalation detected - no tooltip needed (devil bot)");
-      const existingTooltip = document.querySelector(".escalation-tooltip");
-      if (existingTooltip) {
-        existingTooltip.remove();
-      }
-      justRephrased = false;
     }
   }
 }
@@ -2277,7 +2308,7 @@ function showSuccessTooltip(element) {
   }, 2500);
 }
 
-async function createEscalationTooltip(originalText, element, escalationType = 'unknown', botType = 'angel') {
+async function createEscalationTooltip(originalText, element, escalationType = 'unknown', botType = 'angel', preloadedRephrase = undefined) {
   // Remove if already shown
   const existing = document.querySelector(".escalation-tooltip");
   if (existing) existing.remove();
@@ -2543,7 +2574,12 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   // (We attach dismiss handler after rephrase loading finishes, because dismiss is hidden during loading.)
 
   // Generate rephrased version (async - uses Gemini API only, no fallback)
-  try {
+  // If preloadedRephrase was supplied (e.g. from requiresAPI pre-check), skip the API call.
+  if (preloadedRephrase !== undefined) {
+    rephrasedText = preloadedRephrase;
+    timeToRephraseSeconds = 0;
+    console.log("ℹ️ Using preloaded rephrase result — skipping API call inside tooltip");
+  } else try {
     const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     rephrasedText = await rephraseForDeEscalation(originalText, botType);
     const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
