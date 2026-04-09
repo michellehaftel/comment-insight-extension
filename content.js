@@ -1259,7 +1259,30 @@ async function checkForEscalation(element) {
     if (escalationResult.isEscalatory) {
       console.log("🚨 Escalation detected - showing de-escalation tooltip (angel bot)");
       console.log("📝 Requires API:", escalationResult.requiresAPI || false);
-      createEscalationTooltip(text, element, escalationResult.escalationType, 'angel');
+
+      // For Hebrew/non-Latin text the local detector always flags as escalatory.
+      // Call the API first; only show the tooltip when the API confirms escalation.
+      if (escalationResult.requiresAPI) {
+        console.log("⏳ Verifying escalation via API before showing tooltip (requiresAPI=true)...");
+        let preloadedRephrase;
+        try {
+          preloadedRephrase = await rephraseForDeEscalation(text, 'angel');
+        } catch (e) {
+          preloadedRephrase = undefined; // treat as error → show tooltip (so user isn't silently dropped)
+        }
+        if (preloadedRephrase === null) {
+          // API confirmed: text is NOT escalatory → no tooltip
+          console.log("✅ API says not escalatory — suppressing tooltip");
+          const existingTooltip = document.querySelector(".escalation-tooltip");
+          if (existingTooltip) existingTooltip.remove();
+          justRephrased = false;
+        } else {
+          // API confirmed escalation (string) or errored (undefined) → show tooltip
+          createEscalationTooltip(text, element, escalationResult.escalationType, 'angel', preloadedRephrase);
+        }
+      } else {
+        createEscalationTooltip(text, element, escalationResult.escalationType, 'angel');
+      }
     } else {
       console.log("✅ No escalation detected - no tooltip needed (angel bot)");
       const existingTooltip = document.querySelector(".escalation-tooltip");
@@ -1273,7 +1296,26 @@ async function checkForEscalation(element) {
     // Then offer an EVEN MORE escalating rephrase (vs Angel which offers de-escalation)
     if (escalationResult.isEscalatory) {
       console.log("😈 Escalation detected - showing even-more-escalating tooltip (devil bot)");
-      createEscalationTooltip(text, element, escalationResult.escalationType, 'devil');
+
+      if (escalationResult.requiresAPI) {
+        console.log("⏳ Verifying escalation via API before showing tooltip (requiresAPI=true, devil)...");
+        let preloadedRephrase;
+        try {
+          preloadedRephrase = await rephraseForDeEscalation(text, 'devil');
+        } catch (e) {
+          preloadedRephrase = undefined;
+        }
+        if (preloadedRephrase === null) {
+          console.log("✅ API says not escalatory — suppressing tooltip (devil bot)");
+          const existingTooltip = document.querySelector(".escalation-tooltip");
+          if (existingTooltip) existingTooltip.remove();
+          justRephrased = false;
+        } else {
+          createEscalationTooltip(text, element, escalationResult.escalationType, 'devil', preloadedRephrase);
+        }
+      } else {
+        createEscalationTooltip(text, element, escalationResult.escalationType, 'devil');
+      }
     } else {
       console.log("✅ No escalation detected - no tooltip needed (devil bot)");
       const existingTooltip = document.querySelector(".escalation-tooltip");
@@ -2503,7 +2545,7 @@ function showSuccessTooltip(element) {
   }, 2500);
 }
 
-async function createEscalationTooltip(originalText, element, escalationType = 'unknown', botType = 'angel') {
+async function createEscalationTooltip(originalText, element, escalationType = 'unknown', botType = 'angel', preloadedRephrase = undefined) {
   // Remove if already shown
   const existing = document.querySelector(".escalation-tooltip");
   if (existing) existing.remove();
@@ -2769,7 +2811,12 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   // (We attach dismiss handler after rephrase loading finishes, because dismiss is hidden during loading.)
 
   // Generate rephrased version (async - uses Gemini API only, no fallback)
-  try {
+  // If preloadedRephrase was supplied (e.g. from requiresAPI pre-check), skip the API call.
+  if (preloadedRephrase !== undefined) {
+    rephrasedText = preloadedRephrase;
+    timeToRephraseSeconds = 0;
+    console.log("ℹ️ Using preloaded rephrase result — skipping API call inside tooltip");
+  } else try {
     const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     rephrasedText = await rephraseForDeEscalation(originalText, botType);
     const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
