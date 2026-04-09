@@ -1253,76 +1253,65 @@ async function checkForEscalation(element) {
     reasons: escalationResult.reasons
   });
   
-  // Different logic for angel vs devil bot
-  if (botType === 'angel') {
-    // Angel bot: Show tooltip when content IS escalatory (current behavior)
-    if (escalationResult.isEscalatory) {
-      console.log("🚨 Escalation detected - showing de-escalation tooltip (angel bot)");
-      console.log("📝 Requires API:", escalationResult.requiresAPI || false);
+  // Step 1: Decide if the text is escalatory.
+  // For Hebrew/non-Latin text the local detector always flags as escalatory (requiresAPI=true).
+  // In that case we ALWAYS use the angel-bot API call to make the escalation decision —
+  // angel returns null → NOT escalatory → no tooltip for anyone.
+  // angel returns a string → IS escalatory → show bot-appropriate tooltip.
+  // This ensures the same gate is used for both angel and devil.
 
-      // For Hebrew/non-Latin text the local detector always flags as escalatory.
-      // Call the API first; only show the tooltip when the API confirms escalation.
-      if (escalationResult.requiresAPI) {
-        console.log("⏳ Verifying escalation via API before showing tooltip (requiresAPI=true)...");
-        let preloadedRephrase;
-        try {
-          preloadedRephrase = await rephraseForDeEscalation(text, 'angel');
-        } catch (e) {
-          preloadedRephrase = undefined; // treat as error → show tooltip (so user isn't silently dropped)
-        }
-        if (preloadedRephrase === null) {
-          // API confirmed: text is NOT escalatory → no tooltip
-          console.log("✅ API says not escalatory — suppressing tooltip");
-          const existingTooltip = document.querySelector(".escalation-tooltip");
-          if (existingTooltip) existingTooltip.remove();
-          justRephrased = false;
-        } else {
-          // API confirmed escalation (string) or errored (undefined) → show tooltip
-          createEscalationTooltip(text, element, escalationResult.escalationType, 'angel', preloadedRephrase);
-        }
-      } else {
-        createEscalationTooltip(text, element, escalationResult.escalationType, 'angel');
-      }
-    } else {
-      console.log("✅ No escalation detected - no tooltip needed (angel bot)");
-      const existingTooltip = document.querySelector(".escalation-tooltip");
-      if (existingTooltip) {
-        existingTooltip.remove();
-      }
-      justRephrased = false;
+  if (!escalationResult.isEscalatory) {
+    // Local rules already say not escalatory — no tooltip regardless of bot type.
+    console.log("✅ No escalation detected - no tooltip needed");
+    const existingTooltip = document.querySelector(".escalation-tooltip");
+    if (existingTooltip) existingTooltip.remove();
+    justRephrased = false;
+    return;
+  }
+
+  console.log("🚨 Escalation detected. Bot:", botType, "| requiresAPI:", escalationResult.requiresAPI || false);
+
+  if (escalationResult.requiresAPI) {
+    // Use angel API to verify escalation (angel returns null = not escalatory).
+    console.log("⏳ Verifying escalation via angel API before showing tooltip...");
+    let angelRephrase;
+    try {
+      angelRephrase = await rephraseForDeEscalation(text, 'angel');
+    } catch (e) {
+      angelRephrase = undefined; // error → assume escalatory so user isn't silently dropped
     }
-  } else if (botType === 'devil') {
-    // Devil bot: Same detection as Angel - trigger when content IS escalatory
-    // Then offer an EVEN MORE escalating rephrase (vs Angel which offers de-escalation)
-    if (escalationResult.isEscalatory) {
-      console.log("😈 Escalation detected - showing even-more-escalating tooltip (devil bot)");
 
-      if (escalationResult.requiresAPI) {
-        console.log("⏳ Verifying escalation via API before showing tooltip (requiresAPI=true, devil)...");
-        let preloadedRephrase;
-        try {
-          preloadedRephrase = await rephraseForDeEscalation(text, 'devil');
-        } catch (e) {
-          preloadedRephrase = undefined;
-        }
-        if (preloadedRephrase === null) {
-          console.log("✅ API says not escalatory — suppressing tooltip (devil bot)");
-          const existingTooltip = document.querySelector(".escalation-tooltip");
-          if (existingTooltip) existingTooltip.remove();
-          justRephrased = false;
-        } else {
-          createEscalationTooltip(text, element, escalationResult.escalationType, 'devil', preloadedRephrase);
-        }
-      } else {
-        createEscalationTooltip(text, element, escalationResult.escalationType, 'devil');
-      }
-    } else {
-      console.log("✅ No escalation detected - no tooltip needed (devil bot)");
+    if (angelRephrase === null) {
+      // API confirmed: NOT escalatory → suppress tooltip for both angel and devil
+      console.log("✅ API says not escalatory — suppressing tooltip");
       const existingTooltip = document.querySelector(".escalation-tooltip");
-      if (existingTooltip) {
-        existingTooltip.remove();
-      }
+      if (existingTooltip) existingTooltip.remove();
       justRephrased = false;
+      return;
+    }
+
+    // IS escalatory. Now get the bot-appropriate rephrase.
+    if (botType === 'angel') {
+      // Already have the angel rephrase from the verification call — reuse it.
+      createEscalationTooltip(text, element, escalationResult.escalationType, 'angel', angelRephrase);
+    } else {
+      // Devil bot: angel confirmed escalation; now fetch devil's escalating rephrase.
+      let devilRephrase;
+      try {
+        devilRephrase = await rephraseForDeEscalation(text, 'devil');
+      } catch (e) {
+        devilRephrase = undefined;
+      }
+      createEscalationTooltip(text, element, escalationResult.escalationType, 'devil', devilRephrase);
+    }
+  } else {
+    // Local rules detected escalation (English) — show bot-appropriate tooltip directly.
+    if (botType === 'angel') {
+      console.log("🚨 Showing de-escalation tooltip (angel bot)");
+      createEscalationTooltip(text, element, escalationResult.escalationType, 'angel');
+    } else {
+      console.log("😈 Showing escalation tooltip (devil bot)");
+      createEscalationTooltip(text, element, escalationResult.escalationType, 'devil');
     }
   }
 }
