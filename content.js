@@ -633,6 +633,19 @@ function isEscalating(text) {
       return { isEscalatory: false, escalationType: 'none', reasons: ['Incomplete יא — user still typing'] };
     }
 
+    // "יא" + positive adjective = compliment/greeting, NOT escalatory.
+    // The word after "יא" determines everything — positive = compliment, negative = insult.
+    const yaPositiveWords = [
+      'מהממת','מהמם','מושלמת','מושלם','נהדרת','נהדר','מדהימה','מדהים',
+      'יפה','יפהפייה','יפהפה','חמודה','חמוד','נחמדה','נחמד','מקסימה','מקסים',
+      'חכמה','חכם','מוכשרת','מוכשר','מיוחדת','מיוחד','אלופה','אלוף',
+      'ענקית','ענק','מצוינת','מצוין','טובה','טוב','מתוקה','מתוק'
+    ];
+    const yaPositivePattern = new RegExp('יא\\s+(' + yaPositiveWords.join('|') + ')[?!.,\\s]*$', 'i');
+    if (yaPositivePattern.test(trimmedText)) {
+      return { isEscalatory: false, escalationType: 'none', reasons: ['יא + positive word — compliment, not escalatory'] };
+    }
+
     // If we have substantial text in Hebrew, assume it might be escalatory
     // and let the API do the real detection
     if (trimmedText.length >= 10) {

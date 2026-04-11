@@ -149,12 +149,13 @@ In-group/out-group framing that implicitly or explicitly portrays the out-group 
 - Distinguish from: factual comparisons of positions or policies between groups (non-escalatory)
 
 HEBREW/ARABIC SLANG — "יא" CONSTRUCTION (CRITICAL):
-In Hebrew/Arabic slang, "יא" (ya) is a casual address particle. Its meaning depends entirely on the word that follows it:
-- "יא" + POSITIVE word = compliment/affectionate address → NOT escalatory
-  Examples: "יא מהממת" (ya stunning), "יא מושלמת" (ya perfect), "יא חמוד" (ya cutie), "יא מדהים" (ya amazing), "יא יפה" (ya beautiful), "יא נחמד" (ya sweet)
-- "יא" + NEGATIVE word = insult → escalatory
-  Examples: "יא זבל" (ya garbage), "יא מטומטם" (ya idiot), "יא טיפש" (ya stupid), "יא בהמה" (ya animal)
-A greeting like "מה נשמע יא מהממת?" (What's up, stunning?) is a compliment — isEscalatory=false, rephrasedText=null.
+In Hebrew/Arabic slang, "יא" (ya) is a neutral address particle — like "hey" in English. It carries NO inherent negativity.
+The ONLY thing that determines escalation is the word that follows "יא":
+- "יא" + ANY positive/complimentary adjective = greeting/compliment → NOT escalatory, rephrasedText=null
+  Examples: "יא מהממת", "יא מושלמת", "יא נהדרת", "יא מדהים", "יא חמודה", "יא נחמד", "יא יפה", "יא מקסימה", "יא חכמה", "יא מוכשרת", "יא אלופה", "יא מצוינת", "יא מתוקה"
+- "יא" + ANY negative/derogatory adjective = insult → escalatory
+  Examples: "יא זבל", "יא מטומטם", "יא טיפש", "יא בהמה", "יא אידיוט", "יא שוטה"
+Rule: ask yourself — is the word after "יא" something you'd be happy to be called? If yes → compliment → not escalatory.
 
 CONTEXT: {CONTEXT}
 TEXT: "{TEXT}"
@@ -289,12 +290,13 @@ In-group/out-group framing that implicitly or explicitly portrays the out-group 
 - Distinguish from: factual comparisons of positions or policies between groups (non-escalatory)
 
 HEBREW/ARABIC SLANG — "יא" CONSTRUCTION (CRITICAL):
-In Hebrew/Arabic slang, "יא" (ya) is a casual address particle. Its meaning depends entirely on the word that follows it:
-- "יא" + POSITIVE word = compliment/affectionate address → NOT escalatory
-  Examples: "יא מהממת" (ya stunning), "יא מושלמת" (ya perfect), "יא חמוד" (ya cutie), "יא מדהים" (ya amazing), "יא יפה" (ya beautiful), "יא נחמד" (ya sweet)
-- "יא" + NEGATIVE word = insult → escalatory
-  Examples: "יא זבל" (ya garbage), "יא מטומטם" (ya idiot), "יא טיפש" (ya stupid), "יא בהמה" (ya animal)
-A greeting like "מה נשמע יא מהממת?" (What's up, stunning?) is a compliment — isEscalatory=false, rephrasedText=null.
+In Hebrew/Arabic slang, "יא" (ya) is a neutral address particle — like "hey" in English. It carries NO inherent negativity.
+The ONLY thing that determines escalation is the word that follows "יא":
+- "יא" + ANY positive/complimentary adjective = greeting/compliment → NOT escalatory, rephrasedText=null
+  Examples: "יא מהממת", "יא מושלמת", "יא נהדרת", "יא מדהים", "יא חמודה", "יא נחמד", "יא יפה", "יא מקסימה", "יא חכמה", "יא מוכשרת", "יא אלופה", "יא מצוינת", "יא מתוקה"
+- "יא" + ANY negative/derogatory adjective = insult → escalatory
+  Examples: "יא זבל", "יא מטומטם", "יא טיפש", "יא בהמה", "יא אידיוט", "יא שוטה"
+Rule: ask yourself — is the word after "יא" something you'd be happy to be called? If yes → compliment → not escalatory.
 
 CONTEXT: {CONTEXT}
 TEXT: "{TEXT}"
