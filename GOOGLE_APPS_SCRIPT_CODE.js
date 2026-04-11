@@ -89,6 +89,8 @@ function doPost(e) {
           .setMimeType(ContentService.MimeType.JSON)
           .setHeaders(cors);
       }
+      if (data.user_original_text) sheet.getRange(rowIndex, 10).setValue(data.user_original_text); // Column J
+      if (data.rephrase_suggestion) sheet.getRange(rowIndex, 11).setValue(data.rephrase_suggestion); // Column K
       sheet.getRange(rowIndex, 12).setValue(data.did_user_accept || '');
       sheet.getRange(rowIndex, 13).setValue(data.actual_posted_text || '');
       sheet.getRange(rowIndex, 14).setValue(data.delta || '');

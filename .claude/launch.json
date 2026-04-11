@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Proxy Server (dev)",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["nodemon", "index.js"],
+      "port": 3000,
+      "cwd": "proxy-server"
+    },
+    {
+      "name": "Proxy Server (start)",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["index.js"],
+      "port": 3000,
+      "cwd": "proxy-server"
+    }
+  ]
+}

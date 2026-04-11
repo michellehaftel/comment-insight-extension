@@ -124,9 +124,25 @@ function getPostContext() {
     originalPostWriter = 'new';
   }
   
+  // Clean UI noise from captured tweet text before returning
+  if (originalPostContent && originalPostContent !== 'new') {
+    originalPostContent = originalPostContent
+      .replace(/Translated from \w+/gi, '')
+      .replace(/Show original/gi, '')
+      .replace(/Pinned/gi, '')
+      .replace(/·\s*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+/gi, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  }
+
+  if (originalPostWriter && originalPostWriter !== 'new') {
+    // Keep only the first line (display name), drop handle/metadata noise
+    originalPostWriter = originalPostWriter.split('\n')[0].trim();
+  }
+
   return {
-    originalPostContent: originalPostContent ? originalPostContent.substring(0, 500) : 'new',
-    originalPostWriter: originalPostWriter ? originalPostWriter.substring(0, 100) : 'new',
+    originalPostContent: originalPostContent ? originalPostContent.substring(0, 280) : 'new',
+    originalPostWriter: originalPostWriter ? originalPostWriter.substring(0, 60) : 'new',
     isReply: isReply
   };
 }
@@ -256,17 +272,19 @@ function setupPostButtonMonitoring() {
         // If we have a pending interaction (tooltip was shown – they clicked Rephrase or Dismiss), update that row with actual posted text.
         // This covers: accepted rephrase (as-is or edited) and dismissed (original or manually edited). actual_posted_text = what they literally posted.
         if (lastLoggedInteraction) {
-          // Both is_escalating and escalation_type should be based on the user's ORIGINAL text (user_original_text), not the final posted text
-          // This tells us if the user's original intent was escalatory, regardless of what they eventually posted
-          const originalText = lastLoggedInteraction.usersOriginalContent || '';
+          // user_original_text = the full text the user had at post time (finalText).
+          // This avoids capturing a mid-typing snapshot from when the tooltip appeared.
+          // escalation detection is still based on this full text.
+          const originalText = finalText || lastLoggedInteraction.usersOriginalContent || '';
           const originalEscalationResult = isEscalating(originalText);
           const originalEscalationType = originalEscalationResult.isEscalatory ? originalEscalationResult.escalationType : 'none';
           const isEscalatingBasedOnOriginal = originalEscalationResult.isEscalatory;
-          
+
           const updatedData = {
             ...lastLoggedInteraction,
-            escalationType: originalEscalationType, // Based on ORIGINAL text, not final text
-            isEscalating: isEscalatingBasedOnOriginal, // Based on ORIGINAL text, not final text
+            usersOriginalContent: originalText, // Use full text at post time, not mid-typing snapshot
+            escalationType: originalEscalationType,
+            isEscalating: isEscalatingBasedOnOriginal,
             actualPostedText: finalText || ''
           };
           
@@ -333,6 +351,7 @@ async function logInteraction(data) {
         interaction_id: data.interactionId,
         did_user_accept: data.didUserAccept || 'no',
         actual_posted_text: data.actualPostedText || '',
+        user_original_text: data.usersOriginalContent || '',   // overwrite mid-typing snapshot
         rephrase_suggestion: data.rephraseSuggestion || '',
         time_to_rephrase_seconds: data.timeToRephraseSeconds || data.time_to_rephrase_seconds || ''
       };
@@ -540,13 +559,10 @@ function hasHighRiskKeywords(text) {
 
 /**
  * Detect if text contains Hebrew characters
- * DISABLED: Hebrew support is currently deactivated
  */
 function containsHebrew(text) {
   // Hebrew Unicode range: \u0590-\u05FF
-  // DISABLED: Always return false to disable Hebrew support
-  return false;
-  // return /[\u0590-\u05FF]/.test(text);
+  return /[\u0590-\u05FF]/.test(text);
 }
 
 /**
@@ -607,12 +623,10 @@ function isEscalating(text) {
   // If text contains Hebrew or other non-Latin characters, and API is enabled,
   // we should use API-based detection (but for now, allow it through for API check)
   const hasNonLatin = containsNonLatin(trimmedText);
-  const hasHebrew = false; // DISABLED: containsHebrew(trimmedText);
-  
-  // DISABLED: Hebrew special handling
-  // For non-English text (especially Hebrew), we rely on API for detection
-  // So we return a moderate escalation score to trigger API check
-  if (false && (hasHebrew || (hasNonLatin && USE_API))) {
+  const hasHebrew = containsHebrew(trimmedText);
+
+  // For non-English text (especially Hebrew), rely on API for detection
+  if (hasHebrew || (hasNonLatin && USE_API)) {
     // If we have substantial text in Hebrew, assume it might be escalatory
     // and let the API do the real detection
     if (trimmedText.length >= 10) {
@@ -665,8 +679,12 @@ function isEscalating(text) {
   const generalizedPatterns = [
     /\b(the (?:arabs|palestinians|jews|israelis|leftists?|rightists?|lefties?|righties?|leftys?|rightys?|laefies?|republicans|democrats|liberals|conservatives|orthodox|libs?|zionists?))\b/i,
     /\b(the (?:tel avivians?|jerusalemites?|settlers?|hasidim|settlements?))\b/i, // "the Tel Avivians are...", "the settlers"
+    /\b(the (?:women|men|girls|boys|females|males|blonds?|blondes?|redheads?|vegans?|rednecks?|religious|ultra-orthodox|ultraorthodox))\b/i,
+    /\b(the (?:black people|white people|asian people|muslim people|christian people|jewish people))\b/i,
     /\b(all (?:arabs|palestinians|jews|israelis|leftists?|rightists?|lefties?|righties?|libs?|republicans|democrats|liberals|conservatives|of them|of you))\b/i,
+    /\b(all (?:women|men|girls|boys|vegans?|rednecks?|blonds?|blondes?|redheads?|religious|ultra-orthodox|ultraorthodox|black people|white people|asian people|muslim people|christian people|jewish people))\b/i,
     /\b(every (?:arab|palestinian|jew|israeli|leftist|rightist|leftie|rightie|lib|republican|democrat|liberal|conservative))\b/i,
+    /\b(every (?:woman|man|girl|boy|vegan|redneck|blond|blonde|redhead|religious person|ultra-orthodox person|ultraorthodox person))\b/i,
     /\b(they all|you all|all of you|all of them)\b/i,
     /\b(?:those|these) (?:people|guys|folks) (?:on the (?:other side|left|right))\b/i, // "those people on the other side"
     /\b(?:anyone|everyone|everybody) who (?:supports?|believes?|thinks?|agrees?)\b/i, // "anyone who supports"
@@ -686,6 +704,25 @@ function isEscalating(text) {
     }
   });
 
+  // Group-stereotype patterns — group name used as subject + absolute claim
+  // Covers: "Why do women always...", "Leftists always destroy...", "Women never listen..."
+  const GROUP_NAMES = '(?:women|men|girls|boys|vegans?|rednecks?|blonds?|blondes?|redheads?|lefties?|righties?|leftists?|rightists?|liberals?|conservatives?|republicans?|democrats?|libs?|israelis?|palestinians?|jews?|arabs?|religious|ultra-orthodox|ultraorthodox|black people|white people|asian people|settlers?|zionists?|orthodox)';
+  const stereotypeQuestionPatterns = [
+    // "Why do [group] always..."
+    new RegExp(`\\bwhy do ${GROUP_NAMES} always\\b`, 'i'),
+    // "[Group] always/never [any verb]" — group as subject + absolute temporal qualifier
+    new RegExp(`\\b${GROUP_NAMES} (?:always|never) \\w`, 'i'),
+    // "[Group] [verb] everything/nothing/everyone/all..."
+    new RegExp(`\\b${GROUP_NAMES} (?:\\w+ )?(?:everything|nothing|everyone|everybody|all of|none of)\\b`, 'i'),
+  ];
+
+  stereotypeQuestionPatterns.forEach(pattern => {
+    if (pattern.test(trimmedText)) {
+      escalationScore += 2;
+      reasons.push("Group stereotype/generalization");
+    }
+  });
+
   // 3. Categorical/absolute language
   const categoricalWords = [
     /\b(always|never|everyone|nobody|nothing|everything|neither|either)\b/i,
@@ -697,6 +734,12 @@ function isEscalating(text) {
   if (onceAlwaysPattern.test(trimmedText)) {
     escalationScore += 2.5;
     reasons.push("Categorical absolutist pattern (once X, always X)");
+  }
+
+  // "without exception" / "no exceptions" — explicit absolute dismissal of nuance
+  if (/\bwithout exception\b/i.test(trimmedText) || /\bno exceptions?\b/i.test(trimmedText)) {
+    escalationScore += 1.5;
+    reasons.push("Absolute qualifier (without exception)");
   }
   
   // Catch "only [verb]" categorical patterns (e.g., "only cares about", "only wants", "only thinks about")
@@ -735,7 +778,10 @@ function isEscalating(text) {
     /\b(it's (?:your|you're) (?:fault|problem|issue|doing))\b/i,
     /\b(?:your|you're) (?:fault|problem|issue|doing)\b/i, // "your fault", "you're wrong" without "it's"
     /\b(?:this|that|it) (?:is|was) (?:your|you're) (?:fault|problem)\b/i, // "this is your fault"
-    /\b(?:absolutely|completely|totally) (?:your|you're)\b/i // "absolutely your fault"
+    /\b(?:absolutely|completely|totally) (?:your|you're)\b/i, // "absolutely your fault"
+    /\b(?:just )?because of (?:people )?like you\b/i, // "just because of people like you"
+    /\bpeople like you\b/i, // "people like you" - group blame
+    /\bbecause of you(?:\s+(?:people|guys|folks))?\b/i // "because of you"
   ];
   
   blamePatterns.forEach(pattern => {
@@ -1253,36 +1299,28 @@ async function checkForEscalation(element) {
     reasons: escalationResult.reasons
   });
   
-  // Different logic for angel vs devil bot
-  if (botType === 'angel') {
-    // Angel bot: Show tooltip when content IS escalatory (current behavior)
-    if (escalationResult.isEscalatory) {
-      console.log("🚨 Escalation detected - showing de-escalation tooltip (angel bot)");
-      console.log("📝 Requires API:", escalationResult.requiresAPI || false);
-      createEscalationTooltip(text, element, escalationResult.escalationType, 'angel');
-    } else {
-      console.log("✅ No escalation detected - no tooltip needed (angel bot)");
-      const existingTooltip = document.querySelector(".escalation-tooltip");
-      if (existingTooltip) {
-        existingTooltip.remove();
-      }
-      justRephrased = false;
-    }
-  } else if (botType === 'devil') {
-    // Devil bot: Same detection as Angel - trigger when content IS escalatory
-    // Then offer an EVEN MORE escalating rephrase (vs Angel which offers de-escalation)
-    if (escalationResult.isEscalatory) {
-      console.log("😈 Escalation detected - showing even-more-escalating tooltip (devil bot)");
-      createEscalationTooltip(text, element, escalationResult.escalationType, 'devil');
-    } else {
-      console.log("✅ No escalation detected - no tooltip needed (devil bot)");
-      const existingTooltip = document.querySelector(".escalation-tooltip");
-      if (existingTooltip) {
-        existingTooltip.remove();
-      }
-      justRephrased = false;
-    }
+  // Step 1: Decide if the text is escalatory.
+  // For Hebrew/non-Latin text the local detector always flags as escalatory (requiresAPI=true).
+  // In that case we ALWAYS use the angel-bot API call to make the escalation decision —
+  // angel returns null → NOT escalatory → no tooltip for anyone.
+  // angel returns a string → IS escalatory → show bot-appropriate tooltip.
+  // This ensures the same gate is used for both angel and devil.
+
+  if (!escalationResult.isEscalatory) {
+    // Local rules already say not escalatory — no tooltip regardless of bot type.
+    console.log("✅ No escalation detected - no tooltip needed");
+    const existingTooltip = document.querySelector(".escalation-tooltip");
+    if (existingTooltip) existingTooltip.remove();
+    justRephrased = false;
+    return;
   }
+
+  console.log("🚨 Escalation detected. Bot:", botType);
+
+  // Unified path for all languages: show tooltip immediately with loader.
+  // For Hebrew/non-Latin text, the API call inside createEscalationTooltip acts as the
+  // verification gate — if it returns null (not escalatory) the tooltip removes itself silently.
+  createEscalationTooltip(text, element, escalationResult.escalationType, botType);
 }
 
 /**
@@ -1752,152 +1790,30 @@ async function rephraseForDeEscalation(text, botType = 'angel') {
   return null;
 }
 
-// Replace text using the most reliable method for each platform
-// Uses execCommand which preserves editor functionality (including deletion)
+// Replace text in a Lexical/contenteditable editor using execCommand.
+// execCommand('insertText') fires trusted beforeinput + input events that
+// Lexical processes natively — no post-processing needed.
 function replaceTextViaExecCommand(element, text) {
-  console.log("🔧 replaceTextViaExecCommand called with:", {
-    elementTag: element?.tagName,
-    textLength: text?.length,
-    textPreview: text?.substring(0, 50)
-  });
-  
-  if (!element) {
-    console.error("❌ No element provided to replaceTextViaExecCommand");
-    return false;
-  }
-  
-  // Ensure element is focused and editable
+  if (!element) return false;
+
   element.focus({ preventScroll: true });
-  console.log("📍 Element focused");
-  
+
   try {
     const selection = window.getSelection();
-    if (!selection) {
-      console.error("❌ No selection object available");
-      return false;
-    }
-    
-    // Clear any existing selection first
+    if (!selection) return false;
+
+    // Select all existing content via Range API
     selection.removeAllRanges();
-    console.log("📍 Selection cleared");
-    
-    // Select all content in the element
     const range = document.createRange();
-    try {
-      range.selectNodeContents(element);
-      selection.addRange(range);
-      console.log("📍 Selection range created and added");
-    } catch (e) {
-      console.warn("❌ Could not select node contents:", e);
-      return false;
-    }
-    
-    // Use execCommand to replace - this preserves editor structure
-    // First, select all (redundant but helps ensure selection)
-    const selectAllSuccess = document.execCommand('selectAll', false, null);
-    console.log("📍 execCommand('selectAll'):", selectAllSuccess);
-    
-    // Delete the selected content using 'delete' command
-    const deleteSuccess = document.execCommand('delete', false, null);
-    console.log("📍 execCommand('delete'):", deleteSuccess);
-    
-    // Insert the new text using insertText - this is key for editor compatibility
-    // insertText creates proper DOM structure that editors can work with
-    const insertSuccess = document.execCommand('insertText', false, text);
-    console.log("📍 execCommand('insertText'):", insertSuccess);
-    
-    if (insertSuccess) {
-      console.log("✅ Text replaced successfully via execCommand");
-      console.log("📍 Verification: element now contains:", getTextContent(element).substring(0, 50));
-      
-      // CRITICAL: Trigger events that editors need to recognize editing state
-      // These events ensure deletion will work
-      
-      // Trigger input event
-      const inputEvent = new InputEvent('input', {
-        bubbles: true,
-        cancelable: false,
-        inputType: 'insertText',
-        data: text
-      });
-      element.dispatchEvent(inputEvent);
-      
-      // Trigger beforeinput event
-      const beforeInputEvent = new InputEvent('beforeinput', {
-        bubbles: true,
-        cancelable: true,
-        inputType: 'insertText',
-        data: text
-      });
-      element.dispatchEvent(beforeInputEvent);
-      
-      // Position cursor at the end
-      setTimeout(() => {
-        try {
-          const finalSelection = window.getSelection();
-          if (finalSelection && element) {
-            const finalRange = document.createRange();
-            
-            // Try to find the last text node
-            const walker = document.createTreeWalker(
-              element,
-              NodeFilter.SHOW_TEXT,
-              null
-            );
-            
-            let lastTextNode = null;
-            let node;
-            while (node = walker.nextNode()) {
-              lastTextNode = node;
-            }
-            
-            if (lastTextNode && lastTextNode.nodeType === Node.TEXT_NODE) {
-              const len = lastTextNode.textContent?.length || 0;
-              finalRange.setStart(lastTextNode, len);
-              finalRange.setEnd(lastTextNode, len);
-            } else {
-              finalRange.selectNodeContents(element);
-              finalRange.collapse(false);
-            }
-            
-            finalSelection.removeAllRanges();
-            finalSelection.addRange(finalRange);
-            
-            // Ensure focus is maintained
-            element.focus({ preventScroll: true });
-            
-            // Trigger additional events to "wake up" the editor's deletion handlers
-            // Simulate a keypress event to ensure editor recognizes it's in edit mode
-            const keyDownEvent = new KeyboardEvent('keydown', {
-              bubbles: true,
-              cancelable: true,
-              key: 'a',
-              code: 'KeyA'
-            });
-            element.dispatchEvent(keyDownEvent);
-            
-            const keyUpEvent = new KeyboardEvent('keyup', {
-              bubbles: true,
-              cancelable: true,
-              key: 'a',
-              code: 'KeyA'
-            });
-            element.dispatchEvent(keyUpEvent);
-            
-            console.log("✅ Cursor positioned and editor events triggered");
-          }
-          element.focus({ preventScroll: true });
-        } catch (e) {
-          console.warn("Could not position cursor:", e);
-          element.focus({ preventScroll: true });
-        }
-      }, 30);
-      
-      return true;
-    }
-    
-    console.log("insertText command failed");
-    return false;
+    range.selectNodeContents(element);
+    selection.addRange(range);
+
+    // Replace selection with new text.
+    // This fires trusted beforeinput/input events → Lexical updates its
+    // internal state correctly → both add and delete work afterwards.
+    const ok = document.execCommand('insertText', false, text);
+    console.log(ok ? "✅ replaceTextViaExecCommand: text replaced" : "⚠️ replaceTextViaExecCommand: insertText returned false");
+    return ok;
   } catch (e) {
     console.error("replaceTextViaExecCommand failed:", e);
     return false;
@@ -1936,156 +1852,12 @@ function replaceTextInElement(element, newText) {
     } else if (element.contentEditable === 'true' || element.getAttribute('role') === 'textbox') {
       element.focus?.({ preventScroll: true });
       
-      // For Twitter/X, ALWAYS use execCommand as it preserves editor functionality
-      // (including deletion support)
+      // For Twitter/X use execCommand — fires trusted events Lexical handles natively.
+      // No post-processing: any attribute/focus manipulation after insertion
+      // triggers Lexical's MutationObserver and resets editor state.
       if (isTwitter()) {
-        console.log("Twitter/X composer detected → using execCommand for editor compatibility");
-        console.log("🔍 Current text in element:", getTextContent(element).substring(0, 50));
-        console.log("🔍 New text to insert:", newText.substring(0, 50));
-        
-        // Store reference to element for post-processing
-        const twitterElement = element;
-        
-        const success = replaceTextViaExecCommand(element, newText);
-        
-        console.log("🔍 replaceTextViaExecCommand returned:", success);
-        if (success) {
-          setTimeout(() => {
-            const verifyText = getTextContent(element);
-            if (verifyText.trim() === newText.trim() || verifyText.includes(newText.substring(0, Math.min(newText.length, 15)))) {
-              console.log("✅ Twitter composer updated successfully");
-              
-              // Ensure editability is maintained
-              if (wasContentEditable === 'true') {
-                element.contentEditable = 'true';
-                element.setAttribute('contenteditable', 'true');
-              }
-              // Restore other attributes
-              if (originalRole) {
-                element.setAttribute('role', originalRole);
-              }
-              element.removeAttribute('readonly');
-              element.removeAttribute('disabled');
-              
-              // CRITICAL: Additional event triggers to ensure deletion works
-              // Twitter's editor may need these to properly initialize deletion handlers
-              setTimeout(() => {
-                // Ensure element is still editable
-                if (wasContentEditable === 'true') {
-                  element.contentEditable = 'true';
-                  element.setAttribute('contenteditable', 'true');
-                }
-                element.removeAttribute('readonly');
-                element.removeAttribute('disabled');
-                
-                // Focus the element
-                element.focus({ preventScroll: true });
-                
-                // Trigger focus event to ensure editor recognizes focus
-                const focusEvent = new FocusEvent('focus', {
-                  bubbles: true,
-                  cancelable: true,
-                  view: window
-                });
-                element.dispatchEvent(focusEvent);
-                
-                // Ensure selection is properly set at the end
-                const sel = window.getSelection();
-                if (sel && element) {
-                  try {
-                    const range = document.createRange();
-                    const walker = document.createTreeWalker(
-                      element,
-                      NodeFilter.SHOW_TEXT,
-                      null
-                    );
-                    
-                    let lastTextNode = null;
-                    let node;
-                    while (node = walker.nextNode()) {
-                      lastTextNode = node;
-                    }
-                    
-                    if (lastTextNode) {
-                      const len = lastTextNode.textContent?.length || 0;
-                      range.setStart(lastTextNode, len);
-                      range.setEnd(lastTextNode, len);
-                    } else {
-                      range.selectNodeContents(element);
-                      range.collapse(false);
-                    }
-                    
-                    sel.removeAllRanges();
-                    sel.addRange(range);
-                  } catch (e) {
-                    console.warn("Could not set selection:", e);
-                  }
-                }
-                
-                // CRITICAL: Trigger a mock backspace keydown event (cancelled)
-                // This helps Twitter's editor recognize that deletion is enabled
-                // We cancel it so it doesn't actually delete anything
-                const backspaceDown = new KeyboardEvent('keydown', {
-                  bubbles: true,
-                  cancelable: true,
-                  key: 'Backspace',
-                  code: 'Backspace',
-                  keyCode: 8,
-                  which: 8
-                });
-                
-                // Add a listener to prevent actual deletion
-                const preventDelete = (e) => {
-                  if (e.key === 'Backspace') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }
-                };
-                element.addEventListener('keydown', preventDelete, { once: true, capture: true });
-                element.dispatchEvent(backspaceDown);
-                
-                // Also trigger keyup
-                setTimeout(() => {
-                  const backspaceUp = new KeyboardEvent('keyup', {
-                    bubbles: true,
-                    cancelable: true,
-                    key: 'Backspace',
-                    code: 'Backspace',
-                    keyCode: 8,
-                    which: 8
-                  });
-                  element.dispatchEvent(backspaceUp);
-                  
-                  // Remove the prevent listener
-                  element.removeEventListener('keydown', preventDelete, { capture: true });
-                  
-                  console.log("✅ Twitter editor deletion handlers initialized");
-                }, 10);
-              }, 100);
-            } else {
-              console.warn("⚠️ Twitter composer verification mismatch, retrying...");
-              // Retry once more
-              setTimeout(() => {
-                const retrySuccess = replaceTextViaExecCommand(element, newText);
-                if (!retrySuccess) {
-                  console.error("⚠️ execCommand retry failed, Twitter editor may have compatibility issues");
-                }
-              }, 200);
-            }
-          }, 150);
-          return success;
-        } else {
-          // If execCommand failed, try again with a delay
-          console.log("⚠️ Initial execCommand failed, retrying...");
-          setTimeout(() => {
-            const retrySuccess = replaceTextViaExecCommand(element, newText);
-            if (retrySuccess) {
-              console.log("✅ Retry succeeded");
-            }
-          }, 100);
-          // Still return false to try other methods
-          return false;
-        }
+        console.log("Twitter/X composer → execCommand");
+        return replaceTextViaExecCommand(element, newText);
       }
       
       // Ensure the full content is selected before replacement
@@ -2503,7 +2275,7 @@ function showSuccessTooltip(element) {
   }, 2500);
 }
 
-async function createEscalationTooltip(originalText, element, escalationType = 'unknown', botType = 'angel') {
+async function createEscalationTooltip(originalText, element, escalationType = 'unknown', botType = 'angel', preloadedRephrase = undefined) {
   // Remove if already shown
   const existing = document.querySelector(".escalation-tooltip");
   if (existing) existing.remove();
@@ -2769,8 +2541,16 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   // (We attach dismiss handler after rephrase loading finishes, because dismiss is hidden during loading.)
 
   // Generate rephrased version (async - uses Gemini API only, no fallback)
-  try {
+  // If preloadedRephrase was supplied (e.g. from requiresAPI pre-check), skip the API call.
+  if (preloadedRephrase !== undefined) {
+    rephrasedText = preloadedRephrase;
+    timeToRephraseSeconds = 0;
+    console.log("ℹ️ Using preloaded rephrase result — skipping API call inside tooltip");
+  } else try {
     const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+
+    // Detection is identical for angel and devil — both return null if not escalatory.
+    // Divergence happens only AFTER detection: angel de-escalates, devil escalates.
     rephrasedText = await rephraseForDeEscalation(originalText, botType);
     const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     timeToRephraseSeconds = Math.max(0, (t1 - t0) / 1000);
@@ -2847,13 +2627,11 @@ async function createEscalationTooltip(originalText, element, escalationType = '
       allowManualRephrase = true; // Allow user to dismiss and edit manually
       console.log("❌ Rephrasing failed due to error - escalation was detected but API call failed");
     } else if (rephrasedText === null) {
-      // API explicitly returned null (text is already de-escalatory)
-      // NOTE: If escalation was detected but API returns null, this is contradictory
-      // But we trust the API's judgment that it's already de-escalatory
-      errorMsg = '"This text is already de-escalatory and does not need rephrasing."';
-      buttonText = "Dismiss";
-      allowManualRephrase = false;
-      console.log("ℹ️ API returned null - text is already de-escalatory (even though escalation was detected)");
+      // API confirmed: NOT escalatory — remove tooltip silently (same behaviour as local non-escalatory detection).
+      console.log("✅ API returned null — text is not escalatory, removing tooltip");
+      tooltip.remove();
+      justRephrased = false;
+      return;
     } else {
       // Empty string or other unexpected value - treat as error
       errorMsg = '"Due to a problem, we couldn\'t offer a rephrase. Please try rephrasing on your own."';
@@ -2894,9 +2672,12 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     buttonInDOM: rephraseBtn ? rephraseBtn.isConnected : false
   });
 
-  // Log at most ONE pending row per post: if we already have an outstanding pending row, reuse it (no new sheet row).
+  // Log at most ONE pending row per post: if we already have an outstanding pending row
+  // AND no decision has been made yet (no dismiss/accept), reuse it (no new sheet row).
+  // After dismiss or accept, treat the next tooltip as a fresh interaction.
   const rephraseForLog = (rephrasedText && typeof rephrasedText === 'string') ? rephrasedText : '';
-  const alreadyHavePending = lastLoggedInteraction?.interactionId != null;
+  const alreadyHavePending = lastLoggedInteraction?.interactionId != null &&
+    !lastLoggedInteraction?.didUserAccept;
 
   if (alreadyHavePending) {
     // Same composer session – just update in-memory state; do NOT append another row

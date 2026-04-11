@@ -5,19 +5,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const genderSelect = document.getElementById('gender');
   const ageInput = document.getElementById('age');
   const sectorSelect = document.getElementById('sector');
-  const countrySelect = document.getElementById('country');
-  const cityInput = document.getElementById('city');
+  const citySelect = document.getElementById('city');
   const submitBtn = document.getElementById('submitBtn');
-
-  // Populate country dropdown
-  if (typeof COUNTRIES !== 'undefined') {
-    COUNTRIES.forEach(country => {
-      const option = document.createElement('option');
-      option.value = country.code;
-      option.textContent = country.name;
-      countrySelect.appendChild(option);
-    });
-  }
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -29,8 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const gender = genderSelect.value;
     const age = parseInt(ageInput.value);
     const sector = sectorSelect.value;
-    const country = countrySelect.value;
-    const city = cityInput.value.trim();
+    const city = citySelect.value;
 
     let hasError = false;
 
@@ -49,12 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
       hasError = true;
     }
 
-    if (!country) {
-      document.getElementById('countryError').classList.add('show');
-      hasError = true;
-    }
-
-    if (!city || city.length < 2) {
+    if (!city) {
       document.getElementById('cityError').classList.add('show');
       hasError = true;
     }
@@ -63,14 +46,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Disable button while saving
     submitBtn.disabled = true;
-    submitBtn.textContent = 'Saving...';
+    submitBtn.textContent = 'שומר...';
 
     try {
       // Generate unique user ID
       const userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-
-      // Get country name from code
-      const countryName = COUNTRIES.find(c => c.code === country)?.name || country;
 
       // Save to chrome.storage
       await chrome.storage.local.set({
@@ -79,8 +59,8 @@ document.addEventListener('DOMContentLoaded', () => {
         userGender: gender,
         userAge: age,
         userSector: sector,
-        userCountry: country,
-        userCountryName: countryName,
+        userCountry: 'ישראל',
+        userCountryName: 'ישראל',
         userCity: city,
         onboardingDate: new Date().toISOString()
       });
@@ -88,8 +68,8 @@ document.addEventListener('DOMContentLoaded', () => {
       console.log('✅ Onboarding complete! User data saved.');
 
       // Show success message
-      submitBtn.textContent = '✓ Success! Redirecting...';
-      
+      submitBtn.textContent = '✓ נשמר! מעביר אתכם...';
+
       // Redirect to Twitter/X after 1 second
       setTimeout(() => {
         window.location.href = 'https://twitter.com';
@@ -98,8 +78,8 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (error) {
       console.error('Error saving onboarding data:', error);
       submitBtn.disabled = false;
-      submitBtn.textContent = 'Try Again';
-      alert('There was an error saving your information. Please try again.');
+      submitBtn.textContent = 'נסו שוב';
+      alert('אירעה שגיאה בשמירת הפרטים. נא לנסות שוב.');
     }
   });
 
@@ -123,16 +103,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  countrySelect.addEventListener('change', () => {
-    if (countrySelect.value) {
-      document.getElementById('countryError').classList.remove('show');
-    }
-  });
-
-  cityInput.addEventListener('input', () => {
-    if (cityInput.value.trim().length >= 2) {
+  citySelect.addEventListener('change', () => {
+    if (citySelect.value) {
       document.getElementById('cityError').classList.remove('show');
     }
   });
 });
-
