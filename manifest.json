@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Discourse Lab",
-  "version": "1.3",
+  "version": "1.4",
   "description": "Research tool for social media discourse. Detect escalation and explore rephrasing alternatives.",
   "permissions": ["storage"],
   "host_permissions": [
