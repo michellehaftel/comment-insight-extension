@@ -2725,6 +2725,7 @@ async function createEscalationTooltip(originalText, element, escalationType = '
       
       // On Dismiss: did_user_accept = Not accepted. actual_posted_text stays empty until they click Post.
       const interactionData = {
+        usersOriginalContent: originalText, // full text at dismiss time — overwrites mid-typing snapshot
         rephraseSuggestion: (rephrasedText && typeof rephrasedText === 'string') ? rephrasedText : '',
         didUserAccept: 'no',
         actualPostedText: '',
@@ -2906,6 +2907,7 @@ async function createEscalationTooltip(originalText, element, escalationType = '
           // Update sheet: did_user_accept = Accepted only. actual_posted_text is set when they click Post (what they literally post).
           logInteraction({
             interactionId: lastLoggedInteraction.interactionId,
+            usersOriginalContent: originalText, // full text at accept time — overwrites mid-typing snapshot
             didUserAccept: 'yes',
             actualPostedText: '', // Leave empty until Post – user may edit before posting
             rephraseSuggestion: lastLoggedInteraction.rephraseSuggestion || rephrasedText || '',
