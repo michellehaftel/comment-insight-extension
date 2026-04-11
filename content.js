@@ -272,17 +272,19 @@ function setupPostButtonMonitoring() {
         // If we have a pending interaction (tooltip was shown – they clicked Rephrase or Dismiss), update that row with actual posted text.
         // This covers: accepted rephrase (as-is or edited) and dismissed (original or manually edited). actual_posted_text = what they literally posted.
         if (lastLoggedInteraction) {
-          // Both is_escalating and escalation_type should be based on the user's ORIGINAL text (user_original_text), not the final posted text
-          // This tells us if the user's original intent was escalatory, regardless of what they eventually posted
-          const originalText = lastLoggedInteraction.usersOriginalContent || '';
+          // user_original_text = the full text the user had at post time (finalText).
+          // This avoids capturing a mid-typing snapshot from when the tooltip appeared.
+          // escalation detection is still based on this full text.
+          const originalText = finalText || lastLoggedInteraction.usersOriginalContent || '';
           const originalEscalationResult = isEscalating(originalText);
           const originalEscalationType = originalEscalationResult.isEscalatory ? originalEscalationResult.escalationType : 'none';
           const isEscalatingBasedOnOriginal = originalEscalationResult.isEscalatory;
-          
+
           const updatedData = {
             ...lastLoggedInteraction,
-            escalationType: originalEscalationType, // Based on ORIGINAL text, not final text
-            isEscalating: isEscalatingBasedOnOriginal, // Based on ORIGINAL text, not final text
+            usersOriginalContent: originalText, // Use full text at post time, not mid-typing snapshot
+            escalationType: originalEscalationType,
+            isEscalating: isEscalatingBasedOnOriginal,
             actualPostedText: finalText || ''
           };
           
@@ -349,6 +351,7 @@ async function logInteraction(data) {
         interaction_id: data.interactionId,
         did_user_accept: data.didUserAccept || 'no',
         actual_posted_text: data.actualPostedText || '',
+        user_original_text: data.usersOriginalContent || '',   // overwrite mid-typing snapshot
         rephrase_suggestion: data.rephraseSuggestion || '',
         time_to_rephrase_seconds: data.timeToRephraseSeconds || data.time_to_rephrase_seconds || ''
       };
@@ -775,7 +778,10 @@ function isEscalating(text) {
     /\b(it's (?:your|you're) (?:fault|problem|issue|doing))\b/i,
     /\b(?:your|you're) (?:fault|problem|issue|doing)\b/i, // "your fault", "you're wrong" without "it's"
     /\b(?:this|that|it) (?:is|was) (?:your|you're) (?:fault|problem)\b/i, // "this is your fault"
-    /\b(?:absolutely|completely|totally) (?:your|you're)\b/i // "absolutely your fault"
+    /\b(?:absolutely|completely|totally) (?:your|you're)\b/i, // "absolutely your fault"
+    /\b(?:just )?because of (?:people )?like you\b/i, // "just because of people like you"
+    /\bpeople like you\b/i, // "people like you" - group blame
+    /\bbecause of you(?:\s+(?:people|guys|folks))?\b/i // "because of you"
   ];
   
   blamePatterns.forEach(pattern => {
@@ -1309,51 +1315,12 @@ async function checkForEscalation(element) {
     return;
   }
 
-  console.log("🚨 Escalation detected. Bot:", botType, "| requiresAPI:", escalationResult.requiresAPI || false);
+  console.log("🚨 Escalation detected. Bot:", botType);
 
-  if (escalationResult.requiresAPI) {
-    // Use angel API to verify escalation (angel returns null = not escalatory).
-    console.log("⏳ Verifying escalation via angel API before showing tooltip...");
-    let angelRephrase;
-    try {
-      angelRephrase = await rephraseForDeEscalation(text, 'angel');
-    } catch (e) {
-      angelRephrase = undefined; // error → assume escalatory so user isn't silently dropped
-    }
-
-    if (angelRephrase === null) {
-      // API confirmed: NOT escalatory → suppress tooltip for both angel and devil
-      console.log("✅ API says not escalatory — suppressing tooltip");
-      const existingTooltip = document.querySelector(".escalation-tooltip");
-      if (existingTooltip) existingTooltip.remove();
-      justRephrased = false;
-      return;
-    }
-
-    // IS escalatory. Now get the bot-appropriate rephrase.
-    if (botType === 'angel') {
-      // Already have the angel rephrase from the verification call — reuse it.
-      createEscalationTooltip(text, element, escalationResult.escalationType, 'angel', angelRephrase);
-    } else {
-      // Devil bot: angel confirmed escalation; now fetch devil's escalating rephrase.
-      let devilRephrase;
-      try {
-        devilRephrase = await rephraseForDeEscalation(text, 'devil');
-      } catch (e) {
-        devilRephrase = undefined;
-      }
-      createEscalationTooltip(text, element, escalationResult.escalationType, 'devil', devilRephrase);
-    }
-  } else {
-    // Local rules detected escalation (English) — show bot-appropriate tooltip directly.
-    if (botType === 'angel') {
-      console.log("🚨 Showing de-escalation tooltip (angel bot)");
-      createEscalationTooltip(text, element, escalationResult.escalationType, 'angel');
-    } else {
-      console.log("😈 Showing escalation tooltip (devil bot)");
-      createEscalationTooltip(text, element, escalationResult.escalationType, 'devil');
-    }
-  }
+  // Unified path for all languages: show tooltip immediately with loader.
+  // For Hebrew/non-Latin text, the API call inside createEscalationTooltip acts as the
+  // verification gate — if it returns null (not escalatory) the tooltip removes itself silently.
+  createEscalationTooltip(text, element, escalationResult.escalationType, botType);
 }
 
 /**
@@ -2581,6 +2548,9 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     console.log("ℹ️ Using preloaded rephrase result — skipping API call inside tooltip");
   } else try {
     const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+
+    // Detection is identical for angel and devil — both return null if not escalatory.
+    // Divergence happens only AFTER detection: angel de-escalates, devil escalates.
     rephrasedText = await rephraseForDeEscalation(originalText, botType);
     const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     timeToRephraseSeconds = Math.max(0, (t1 - t0) / 1000);
@@ -2657,13 +2627,11 @@ async function createEscalationTooltip(originalText, element, escalationType = '
       allowManualRephrase = true; // Allow user to dismiss and edit manually
       console.log("❌ Rephrasing failed due to error - escalation was detected but API call failed");
     } else if (rephrasedText === null) {
-      // API explicitly returned null (text is already de-escalatory)
-      // NOTE: If escalation was detected but API returns null, this is contradictory
-      // But we trust the API's judgment that it's already de-escalatory
-      errorMsg = '"This text is already de-escalatory and does not need rephrasing."';
-      buttonText = "Dismiss";
-      allowManualRephrase = false;
-      console.log("ℹ️ API returned null - text is already de-escalatory (even though escalation was detected)");
+      // API confirmed: NOT escalatory — remove tooltip silently (same behaviour as local non-escalatory detection).
+      console.log("✅ API returned null — text is not escalatory, removing tooltip");
+      tooltip.remove();
+      justRephrased = false;
+      return;
     } else {
       // Empty string or other unexpected value - treat as error
       errorMsg = '"Due to a problem, we couldn\'t offer a rephrase. Please try rephrasing on your own."';

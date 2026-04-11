@@ -283,12 +283,13 @@ In-group/out-group framing that implicitly or explicitly portrays the out-group 
 CONTEXT: {CONTEXT}
 TEXT: "{TEXT}"
 
-TASK: The input text is ALREADY escalatory. You MUST provide an EVEN MORE escalated version.
+TASK: First detect whether the text is escalatory (same detection logic as the angel bot).
+- If NOT escalatory (legitimate discourse, neutral, compliment, factual): set isEscalatory=false and rephrasedText=null — do NOT amplify non-escalatory content.
+- If escalatory: provide an EVEN MORE escalated version.
 Always respond in the same language as the input text.
 - Preserve the user's tone of voice but amplify it (same person, higher volume)
 - If the text is primarily cognitive → add emotional charge, or vice versa
 - Combine emotional and cognitive escalation if it strengthens the message
-- NEVER return null. ALWAYS provide a more escalated rephrasing.
 
 ESCALATION AMPLIFICATION PRINCIPLES:
 
@@ -336,14 +337,14 @@ OUTPUT (JSON only):
       "contextSufficiency": "<whether context was sufficient to understand the bigger picture or insufficient>"
     }
   },
-  "rephrasedText": "<even more escalated version>",
+  "rephrasedText": "<even more escalated version>" | null,
   "suggestions": null
 }
 
 CRITICAL RULES - READ CAREFULLY:
-1. rephrasedText MUST ALWAYS be a string - the EVEN MORE escalated version (never null)
-2. rephrasedText MUST be the actual escalated text the user would post, NOT meta-commentary
-3. The input is ALREADY escalatory - your job is to make it MORE so
+1. If NOT escalatory: rephrasedText=null, isEscalatory=false — same as angel bot detection
+2. If escalatory: rephrasedText MUST be a string — the EVEN MORE escalated version (never empty)
+3. rephrasedText MUST be the actual escalated text the user would post, NOT meta-commentary
 4. Keep the user's tone of voice, just amplify it
 5. Combine emotional and cognitive escalation when it makes the message stronger
 
