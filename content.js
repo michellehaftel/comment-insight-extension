@@ -633,17 +633,19 @@ function isEscalating(text) {
       return { isEscalatory: false, escalationType: 'none', reasons: ['Incomplete יא — user still typing'] };
     }
 
-    // "יא" + positive adjective = compliment/greeting, NOT escalatory.
-    // The word after "יא" determines everything — positive = compliment, negative = insult.
-    const yaPositiveWords = [
-      'מהממת','מהמם','מושלמת','מושלם','נהדרת','נהדר','מדהימה','מדהים',
-      'יפה','יפהפייה','יפהפה','חמודה','חמוד','נחמדה','נחמד','מקסימה','מקסים',
-      'חכמה','חכם','מוכשרת','מוכשר','מיוחדת','מיוחד','אלופה','אלוף',
-      'ענקית','ענק','מצוינת','מצוין','טובה','טוב','מתוקה','מתוק'
+    // "יא" + word: only escalatory if the word after it is a known insult.
+    // Anything else (compliments, nicknames, neutral words) = not escalatory.
+    // Negative list is bounded; positive list is infinite — so we flip the logic.
+    const yaInsultWords = [
+      'זבל','אשפה','מטומטם','מטומטמת','טיפש','טיפשה','שוטה','אידיוט','אידיוטית',
+      'בהמה','חמור','חמורה','כלב','כלבה','פרה','חזיר','חזירה',
+      'נבל','נבלה','מרושע','מרושעת','רשע','רשעה','שקרן','שקרנית',
+      'לוזר','פתי','פתיה','מניאק','מניאקית','פסיכו','משוגע','משוגעת',
+      'סרחון','דביל','דבילה','מפגר','מפגרת','עלוב','עלובה'
     ];
-    const yaPositivePattern = new RegExp('יא\\s+(' + yaPositiveWords.join('|') + ')[?!.,\\s]*$', 'i');
-    if (yaPositivePattern.test(trimmedText)) {
-      return { isEscalatory: false, escalationType: 'none', reasons: ['יא + positive word — compliment, not escalatory'] };
+    const yaInsultPattern = new RegExp('יא\\s+(' + yaInsultWords.join('|') + ')', 'i');
+    if (/יא\s+\S/.test(trimmedText) && !yaInsultPattern.test(trimmedText)) {
+      return { isEscalatory: false, escalationType: 'none', reasons: ['יא + non-insult word — compliment or neutral, not escalatory'] };
     }
 
     // If we have substantial text in Hebrew, assume it might be escalatory
