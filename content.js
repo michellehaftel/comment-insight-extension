@@ -627,11 +627,32 @@ function isEscalating(text) {
 
   // For non-English text (especially Hebrew), rely on API for detection
   if (hasHebrew || (hasNonLatin && USE_API)) {
+    // If text ends with "יא" (with nothing after), the user is still mid-sentence.
+    // "יא" alone is not escalatory — it's just the address particle waiting for a word.
+    if (/יא\s*$/.test(trimmedText)) {
+      return { isEscalatory: false, escalationType: 'none', reasons: ['Incomplete יא — user still typing'] };
+    }
+
+    // "יא" + word: only escalatory if the word after it is a known insult.
+    // Anything else (compliments, nicknames, neutral words) = not escalatory.
+    // Negative list is bounded; positive list is infinite — so we flip the logic.
+    const yaInsultWords = [
+      'זבל','אשפה','מטומטם','מטומטמת','טיפש','טיפשה','שוטה','אידיוט','אידיוטית',
+      'בהמה','חמור','חמורה','כלב','כלבה','פרה','חזיר','חזירה',
+      'נבל','נבלה','מרושע','מרושעת','רשע','רשעה','שקרן','שקרנית',
+      'לוזר','פתי','פתיה','מניאק','מניאקית','פסיכו','משוגע','משוגעת',
+      'סרחון','דביל','דבילה','מפגר','מפגרת','עלוב','עלובה'
+    ];
+    const yaInsultPattern = new RegExp('יא\\s+(' + yaInsultWords.join('|') + ')', 'i');
+    if (/יא\s+\S/.test(trimmedText) && !yaInsultPattern.test(trimmedText)) {
+      return { isEscalatory: false, escalationType: 'none', reasons: ['יא + non-insult word — compliment or neutral, not escalatory'] };
+    }
+
     // If we have substantial text in Hebrew, assume it might be escalatory
     // and let the API do the real detection
     if (trimmedText.length >= 10) {
-      return { 
-        isEscalatory: true, 
+      return {
+        isEscalatory: true,
         escalationType: 'unknown',
         reasons: ['Non-English text detected - using API for detection'],
         requiresAPI: true // Flag to indicate API should be used
@@ -2725,6 +2746,7 @@ async function createEscalationTooltip(originalText, element, escalationType = '
       
       // On Dismiss: did_user_accept = Not accepted. actual_posted_text stays empty until they click Post.
       const interactionData = {
+        usersOriginalContent: originalText, // full text at dismiss time — overwrites mid-typing snapshot
         rephraseSuggestion: (rephrasedText && typeof rephrasedText === 'string') ? rephrasedText : '',
         didUserAccept: 'no',
         actualPostedText: '',
@@ -2906,6 +2928,7 @@ async function createEscalationTooltip(originalText, element, escalationType = '
           // Update sheet: did_user_accept = Accepted only. actual_posted_text is set when they click Post (what they literally post).
           logInteraction({
             interactionId: lastLoggedInteraction.interactionId,
+            usersOriginalContent: originalText, // full text at accept time — overwrites mid-typing snapshot
             didUserAccept: 'yes',
             actualPostedText: '', // Leave empty until Post – user may edit before posting
             rephraseSuggestion: lastLoggedInteraction.rephraseSuggestion || rephrasedText || '',
