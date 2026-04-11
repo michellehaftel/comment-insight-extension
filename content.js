@@ -627,11 +627,17 @@ function isEscalating(text) {
 
   // For non-English text (especially Hebrew), rely on API for detection
   if (hasHebrew || (hasNonLatin && USE_API)) {
+    // If text ends with "יא" (with nothing after), the user is still mid-sentence.
+    // "יא" alone is not escalatory — it's just the address particle waiting for a word.
+    if (/יא\s*$/.test(trimmedText)) {
+      return { isEscalatory: false, escalationType: 'none', reasons: ['Incomplete יא — user still typing'] };
+    }
+
     // If we have substantial text in Hebrew, assume it might be escalatory
     // and let the API do the real detection
     if (trimmedText.length >= 10) {
-      return { 
-        isEscalatory: true, 
+      return {
+        isEscalatory: true,
         escalationType: 'unknown',
         reasons: ['Non-English text detected - using API for detection'],
         requiresAPI: true // Flag to indicate API should be used
