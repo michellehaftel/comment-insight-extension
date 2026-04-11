@@ -148,6 +148,14 @@ In-group/out-group framing that implicitly or explicitly portrays the out-group 
 - Categorical claims about what all members of a group are, believe, or want → escalatory
 - Distinguish from: factual comparisons of positions or policies between groups (non-escalatory)
 
+HEBREW/ARABIC SLANG — "יא" CONSTRUCTION (CRITICAL):
+In Hebrew/Arabic slang, "יא" (ya) is a casual address particle. Its meaning depends entirely on the word that follows it:
+- "יא" + POSITIVE word = compliment/affectionate address → NOT escalatory
+  Examples: "יא מהממת" (ya stunning), "יא מושלמת" (ya perfect), "יא חמוד" (ya cutie), "יא מדהים" (ya amazing), "יא יפה" (ya beautiful), "יא נחמד" (ya sweet)
+- "יא" + NEGATIVE word = insult → escalatory
+  Examples: "יא זבל" (ya garbage), "יא מטומטם" (ya idiot), "יא טיפש" (ya stupid), "יא בהמה" (ya animal)
+A greeting like "מה נשמע יא מהממת?" (What's up, stunning?) is a compliment — isEscalatory=false, rephrasedText=null.
+
 CONTEXT: {CONTEXT}
 TEXT: "{TEXT}"
 
@@ -279,6 +287,14 @@ In-group/out-group framing that implicitly or explicitly portrays the out-group 
 - Repeated "you" (or "אתם") accusations contrasted with an implied virtuous "we" → escalatory
 - Categorical claims about what all members of a group are, believe, or want → escalatory
 - Distinguish from: factual comparisons of positions or policies between groups (non-escalatory)
+
+HEBREW/ARABIC SLANG — "יא" CONSTRUCTION (CRITICAL):
+In Hebrew/Arabic slang, "יא" (ya) is a casual address particle. Its meaning depends entirely on the word that follows it:
+- "יא" + POSITIVE word = compliment/affectionate address → NOT escalatory
+  Examples: "יא מהממת" (ya stunning), "יא מושלמת" (ya perfect), "יא חמוד" (ya cutie), "יא מדהים" (ya amazing), "יא יפה" (ya beautiful), "יא נחמד" (ya sweet)
+- "יא" + NEGATIVE word = insult → escalatory
+  Examples: "יא זבל" (ya garbage), "יא מטומטם" (ya idiot), "יא טיפש" (ya stupid), "יא בהמה" (ya animal)
+A greeting like "מה נשמע יא מהממת?" (What's up, stunning?) is a compliment — isEscalatory=false, rephrasedText=null.
 
 CONTEXT: {CONTEXT}
 TEXT: "{TEXT}"
