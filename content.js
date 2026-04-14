@@ -741,8 +741,20 @@ function isEscalating(text) {
     });
 
     // Category 6: Derogatory group label + negative predicate (+2)
-    const hebrewGroupLabels = ['שמאלנים','ימנים','ערבים','חרדים','ציונים','מתנחלים','חילונים'];
-    const hebrewGroupNegative = /(?:\s+תמיד|\s+אף\s+פעם|\s+לעולם|\s+כולם|\s+הורסים|\s+אשמים|\s+גרמו|\s+בגלל|\s+שונאים)/;
+    const hebrewGroupLabels = [
+      // Political
+      'שמאלנים','ימנים','ביביסטים','ליברלים','פשיסטים','קומוניסטים','ציונים','מתנחלים','פלסטינאים',
+      // Religious / ethnic
+      'חרדים','דתיים','חילונים','מסורתיים','דתלשים','דתל"שים',
+      'אשכנזים','מזרחים','ספרדים','אתיופים','דרוזים','ערבים','בדואים',
+      // Appearance / physical
+      "ג'ינג'ים","ג׳ינג׳ים",'שמנים','רזים',
+      // Geographic / lifestyle
+      'תל אביבים','ירושלמים','מתנשאים',
+      // Gender / orientation
+      'פמיניסטיות','פמיניסטים','הומואים','לסביות','טרנסים'
+    ];
+    const hebrewGroupNegative = /(?:\s+תמיד|\s+אף\s+פעם|\s+לעולם|\s+כולם|\s+הורסים|\s+אשמים|\s+גרמו|\s+בגלל|\s+שונאים|\s+מסוכנים|\s+מזיקים|\s+מרעילים|\s+מחריבים|\s+כושלים|\s+רעים|\s+גרועים|\s+מטורפים|\s+מחרפנים|\s+לא\s+שווים|\s+לא\s+בסדר|\s+סכנה|\s+בעיה|\s+אסון)/;
     hebrewGroupLabels.forEach(label => {
       if (new RegExp(label + hebrewGroupNegative.source).test(trimmedText)) {
         hebrewScore += 2;
@@ -758,8 +770,31 @@ function isEscalating(text) {
     if (hebrewCapsRatio > 0.25 && trimmedText.length > 15) { hebrewScore += 1.5; hebrewReasons.push('Excessive caps'); }
     else if (hebrewCapsRatio > 0.15 && trimmedText.length > 30) { hebrewScore += 0.5; hebrewReasons.push('Caps emphasis'); }
 
+    // Category 8: Judging / condemning (+2 to +2.5)
+    if (/אני לא מאמינ[אה] כמה (?:אתה|את) /.test(trimmedText) ||
+        /כמה (?:אתה|את) (?:טיפש|טיפשה|מגוחך|מגוחכת|עצוב|עצובה|נורא|נוראי|נוראית|עלוב|עלובה)/.test(trimmedText)) {
+      hebrewScore += 2.5;
+      hebrewReasons.push('Hebrew judging/condemning (high-weight)');
+    }
+    const hebrewJudgingPatterns = [
+      /(?:אתה|את) (?:כזה|כזאת|ממש|פשוט) (?:נורא|נוראי|נוראית|איום|איומה|מגעיל|מגעילה|מחריד|מחרידה|מביש|מבישה|עלוב|עלובה|מצחיק|מצחיקה|עצוב|עצובה)/,
+      /(?:אתה|את) (?:אדם|בן אדם|יצור) (?:נורא|נוראי|נוראית|איום|איומה|מגעיל|מגעילה|מחריד|מחרידה|מביש|מבישה)/,
+      /איזה (?:בן אדם|יצור|דמות|אדם) (?:עצוב|עצובה|עלוב|עלובה|מביש|מבישה|נורא|נוראי|מגעיל|מגעילה)/,
+      /(?:אתה|את) (?:הכי|הדבר הכי) (?:נורא|גרוע|גרועה|מגעיל|מגעילה|עלוב|עלובה|מביש|מבישה)/,
+      /לא יאומן כמה (?:אתה|את)/,
+      /(?:אתה|את) (?:ממש )?(?:מביש|מבישה|מגעיל|מגעילה|מחריד|מחרידה)/,
+      /(?:אתה|את) (?:הכי גדול ב|אלוף ב)?שקרים/,
+      /(?:ביב|נתניהו|גנץ|\w+) (?:הוא|היא) (?:אדם|יצור|בן אדם|ה)?(?:נורא|נוראי|נוראית|מגעיל|מגעילה|מחריד|מחרידה|מביש|מבישה|עלוב|עלובה|שרלטן|רמאי|שקרן)/
+    ];
+    hebrewJudgingPatterns.forEach(p => {
+      if (p.test(trimmedText)) {
+        hebrewScore += 2;
+        hebrewReasons.push('Hebrew judging/condemning');
+      }
+    });
+
     // Combination bonus
-    const hHasAttack = hebrewReasons.some(r => r.includes('insult') || r.includes('blame') || r.includes('accusat') || r.includes('slur'));
+    const hHasAttack = hebrewReasons.some(r => r.includes('insult') || r.includes('blame') || r.includes('accusat') || r.includes('slur') || r.includes('judging'));
     const hHasCategorical = hebrewReasons.some(r => r.includes('categorical') || r.includes('absolute') || r.includes('group'));
     if (hHasAttack && hHasCategorical) { hebrewScore += 1; hebrewReasons.push('Combined attack+categorical'); }
 
