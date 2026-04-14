@@ -82,9 +82,44 @@ function normalizeDidUserAccept(value) {
   return value || 'Pending';
 }
 
+const SURVEY_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSdH7hDhb2KKKCiaSH4wVONl0XMzFtoZtmz3NTYFSUTtFjrRzA/viewform';
+const MIN_INTERACTIONS = 50;
+const MIN_DAYS = 7;
+const MAX_DAYS = 14;
+
+async function checkSurveyTrigger() {
+  const { interactionCount = 0, onboardingDate, surveyShown } = await chrome.storage.local.get([
+    'interactionCount', 'onboardingDate', 'surveyShown'
+  ]);
+
+  if (surveyShown) return;
+  if (!onboardingDate) return;
+
+  const daysSince = (Date.now() - new Date(onboardingDate).getTime()) / (1000 * 60 * 60 * 24);
+  const enoughTime = daysSince >= MIN_DAYS;
+  const enoughInteractions = interactionCount >= MIN_INTERACTIONS;
+  const hitCeiling = daysSince >= MAX_DAYS;
+
+  if ((enoughTime && enoughInteractions) || hitCeiling) {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tabs[0]) {
+      chrome.tabs.sendMessage(tabs[0].id, { type: 'SHOW_SURVEY_BANNER' });
+    }
+    await chrome.storage.local.set({ surveyShown: true });
+    console.log('📋 Survey trigger fired! Days:', Math.floor(daysSince), '| Interactions:', interactionCount);
+  }
+}
+
 async function handleDataLogging(data) {
   try {
     console.log('📊 Logging interaction data:', data);
+
+    // Increment interaction counter for every new interaction (not updates)
+    if (data.action !== 'update') {
+      const { interactionCount = 0 } = await chrome.storage.local.get('interactionCount');
+      await chrome.storage.local.set({ interactionCount: interactionCount + 1 });
+      await checkSurveyTrigger();
+    }
 
     // Update existing row (when user clicks Post or Dismiss)
     if (data.action === 'update' && data.interaction_id) {
@@ -105,8 +140,8 @@ async function handleDataLogging(data) {
     }
 
     // Get user info from storage (for new row append)
-    const { userId, userGender, userAge, userSector, userCountry, userCountryName, userCity } = await chrome.storage.local.get([
-      'userId',
+    const { studyId, userGender, userAge, userSector, userCountry, userCountryName, userCity } = await chrome.storage.local.get([
+      'studyId',
       'userGender',
       'userAge',
       'userSector',
@@ -118,7 +153,7 @@ async function handleDataLogging(data) {
     const delta = calculateDelta(data.actual_posted_text || '', data.rephrase_suggestion || '');
 
     const logData = {
-      user_id: userId || 'unknown',
+      user_id: studyId || 'unknown',
       date: data.date || new Date().toISOString(),
       gender: userGender || 'unknown',
       age: userAge || 'unknown',

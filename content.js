@@ -625,17 +625,16 @@ function isEscalating(text) {
   const hasNonLatin = containsNonLatin(trimmedText);
   const hasHebrew = containsHebrew(trimmedText);
 
-  // For non-English text (especially Hebrew), rely on API for detection
+  // Hebrew local scoring — mirrors English detection logic.
+  // Score 0 → not escalatory, no API call. Score > 0 → API makes final call.
   if (hasHebrew || (hasNonLatin && USE_API)) {
-    // If text ends with "יא" (with nothing after), the user is still mid-sentence.
-    // "יא" alone is not escalatory — it's just the address particle waiting for a word.
+
+    // Guard 1: incomplete יא — user still typing
     if (/יא\s*$/.test(trimmedText)) {
       return { isEscalatory: false, escalationType: 'none', reasons: ['Incomplete יא — user still typing'] };
     }
 
-    // "יא" + word: only escalatory if the word after it is a known insult.
-    // Anything else (compliments, nicknames, neutral words) = not escalatory.
-    // Negative list is bounded; positive list is infinite — so we flip the logic.
+    // Guard 2: יא + word — only escalatory if the word is a known insult
     const yaInsultWords = [
       'זבל','אשפה','מטומטם','מטומטמת','טיפש','טיפשה','שוטה','אידיוט','אידיוטית',
       'בהמה','חמור','חמורה','כלב','כלבה','פרה','חזיר','חזירה',
@@ -645,19 +644,132 @@ function isEscalating(text) {
     ];
     const yaInsultPattern = new RegExp('יא\\s+(' + yaInsultWords.join('|') + ')', 'i');
     if (/יא\s+\S/.test(trimmedText) && !yaInsultPattern.test(trimmedText)) {
-      return { isEscalatory: false, escalationType: 'none', reasons: ['יא + non-insult word — compliment or neutral, not escalatory'] };
+      return { isEscalatory: false, escalationType: 'none', reasons: ['יא + non-insult word — compliment or neutral'] };
     }
 
-    // If we have substantial text in Hebrew, assume it might be escalatory
-    // and let the API do the real detection
-    if (trimmedText.length >= 10) {
-      return {
-        isEscalatory: true,
-        escalationType: 'unknown',
-        reasons: ['Non-English text detected - using API for detection'],
-        requiresAPI: true // Flag to indicate API should be used
-      };
+    // ── Hebrew local scoring ──────────────────────────────────────────────────
+    let hebrewScore = 0;
+    const hebrewReasons = [];
+
+    // Category 1: Direct insults / profanity (+3)
+    const hebrewInsultWords = [
+      'כלב','כלבה','חמור','חמורה','פרה','חזיר','חזירה','בהמה',
+      'מטומטם','מטומטמת','טיפש','טיפשה','שוטה','אידיוט','אידיוטית',
+      'דביל','דבילה','מפגר','מפגרת','נבל','נבלה','מרושע','מרושעת',
+      'רשע','רשעה','שקרן','שקרנית','עלוב','עלובה','לוזר','פתי','פתיה',
+      'מניאק','מניאקית','פסיכו','משוגע','משוגעת','זבל','אשפה','סרחון'
+    ];
+    const hebrewInsultRx = new RegExp(
+      '(?:^|[\\s,\\.!?״""\'()])(?:' + hebrewInsultWords.join('|') + ')(?=$|[\\s,\\.!?״""\'()])'
+    );
+    if (hebrewInsultRx.test(trimmedText)) {
+      hebrewScore += 3;
+      hebrewReasons.push('Hebrew insult/profanity');
     }
+    if (/פשיסט|נאצי|נאצים|פשיסטים/.test(trimmedText)) {
+      hebrewScore += 3;
+      hebrewReasons.push('Extreme political slur');
+    }
+
+    // Category 2: Blame patterns (+2.5)
+    const hebrewBlamePatterns = [
+      /בגללך/,
+      /בגלל\s+אנשים\s+כמוך/,
+      /אשמתך/,
+      /(?:אתה|את|אתם|אתן)\s+אשמ/,
+      /(?:אתה|את|אתם|אתן)\s+גרמת|אתם\s+גרמתם/,
+      /בגלל\s+מה\s+שאתה\s+עשית/,
+      /(?:אתה|את|אתם|אתן)\s+(?:הרסת|הרסתם|הרסתן)/,
+      /בגלל\s+(?:אנשים\s+כמוך|כמוך)/,
+    ];
+    hebrewBlamePatterns.forEach(p => {
+      if (p.test(trimmedText)) {
+        hebrewScore += 2.5;
+        hebrewReasons.push('Hebrew blame/accusation');
+      }
+    });
+
+    // Category 3: Accusatory "you" + absolutes (+2)
+    const hebrewAccusatoryPatterns = [
+      /(?:אתה|את|אתם|אתן)\s+תמיד/,
+      /(?:אתה|את|אתם|אתן)\s+אף\s+פעם/,
+      /(?:אתה|את|אתם|אתן)\s+לעולם\s+לא/,
+      /(?:אתה|את|אתם|אתן)\s+כל\s+כך\s+/,
+      /(?:אתה|את|אתם|אתן)\s+כזה\s+/,
+      /(?:אתה|את)\s+(?:לא\s+)?מבינ/,
+    ];
+    hebrewAccusatoryPatterns.forEach(p => {
+      if (p.test(trimmedText)) {
+        hebrewScore += 2;
+        hebrewReasons.push('Hebrew accusatory "you" + absolute');
+      }
+    });
+
+    // Category 4: Categorical / absolute language (+1, up to +2)
+    const hebrewCategoricalPatterns = [
+      /תמיד/, /אף\s+פעם/, /לעולם\s+לא/, /כולם/, /אף\s+אחד/,
+      /הכל/, /כלום/, /בהחלט/, /ללא\s+יוצא\s+מן\s+הכלל/
+    ];
+    let hebrewCategoricalCount = 0;
+    hebrewCategoricalPatterns.forEach(p => {
+      const m = trimmedText.match(new RegExp(p.source, 'g'));
+      if (m) hebrewCategoricalCount += m.length;
+    });
+    if (hebrewCategoricalCount >= 3) {
+      hebrewScore += 2; hebrewReasons.push('Multiple Hebrew categorical terms');
+    } else if (hebrewCategoricalCount >= 1) {
+      hebrewScore += 1; hebrewReasons.push('Hebrew categorical/absolute language');
+    }
+
+    // Category 5: Dismissal (+1.5)
+    const hebrewDismissalPatterns = [
+      /שטויות/,
+      /זה\s+לא\s+נכון/,
+      /(?:אתה|את)\s+טועה/,
+      /אתם\s+טועים/,
+      /אין\s+לך\s+מושג/,
+      /(?:אתה|את)\s+לא\s+מבינ/,
+      /זה\s+לא\s+משנה/,
+      /לא\s+מעניין\s+אותי/,
+      /אין\s+לזה\s+שחר/,
+    ];
+    hebrewDismissalPatterns.forEach(p => {
+      if (p.test(trimmedText)) {
+        hebrewScore += 1.5;
+        hebrewReasons.push('Hebrew dismissal');
+      }
+    });
+
+    // Category 6: Derogatory group label + negative predicate (+2)
+    const hebrewGroupLabels = ['שמאלנים','ימנים','ערבים','חרדים','ציונים','מתנחלים','חילונים'];
+    const hebrewGroupNegative = /(?:\s+תמיד|\s+אף\s+פעם|\s+לעולם|\s+כולם|\s+הורסים|\s+אשמים|\s+גרמו|\s+בגלל|\s+שונאים)/;
+    hebrewGroupLabels.forEach(label => {
+      if (new RegExp(label + hebrewGroupNegative.source).test(trimmedText)) {
+        hebrewScore += 2;
+        hebrewReasons.push('Hebrew derogatory group label as attack');
+      }
+    });
+
+    // Category 7: Exclamation marks + caps (mirrors English)
+    const hebrewExcl = (trimmedText.match(/!/g) || []).length;
+    if (hebrewExcl >= 2) { hebrewScore += 1; hebrewReasons.push('Multiple exclamation marks'); }
+    else if (hebrewExcl === 1 && trimmedText.length < 80) { hebrewScore += 0.5; hebrewReasons.push('Exclamation mark'); }
+    const hebrewCapsRatio = trimmedText.length > 0 ? (trimmedText.match(/[A-Z]/g) || []).length / trimmedText.length : 0;
+    if (hebrewCapsRatio > 0.25 && trimmedText.length > 15) { hebrewScore += 1.5; hebrewReasons.push('Excessive caps'); }
+    else if (hebrewCapsRatio > 0.15 && trimmedText.length > 30) { hebrewScore += 0.5; hebrewReasons.push('Caps emphasis'); }
+
+    // Combination bonus
+    const hHasAttack = hebrewReasons.some(r => r.includes('insult') || r.includes('blame') || r.includes('accusat') || r.includes('slur'));
+    const hHasCategorical = hebrewReasons.some(r => r.includes('categorical') || r.includes('absolute') || r.includes('group'));
+    if (hHasAttack && hHasCategorical) { hebrewScore += 1; hebrewReasons.push('Combined attack+categorical'); }
+
+    // ── Decision ─────────────────────────────────────────────────────────────
+    if (hebrewScore === 0) {
+      console.log('✓ Hebrew — no escalatory signals', { text: trimmedText.substring(0, 50) });
+      return { isEscalatory: false, escalationType: 'none', reasons: ['Hebrew — no escalatory signals'] };
+    }
+    console.log(`🚨 Hebrew escalation signals (score: ${hebrewScore.toFixed(1)}) → API`, { reasons: hebrewReasons });
+    return { isEscalatory: true, escalationType: 'unknown', reasons: hebrewReasons, hebrewScore, requiresAPI: true };
   }
 
   let escalationScore = 0;
@@ -3217,3 +3329,81 @@ if (document.readyState === "loading") {
 } else {
   initializeObserver();
 }
+
+// ── Survey Banner ──────────────────────────────────────────────────────────
+
+function showSurveyBanner(studyId) {
+  if (document.getElementById('discourse-lab-survey-banner')) return;
+
+  const formUrl = studyId
+    ? `https://docs.google.com/forms/d/e/1FAIpQLSdH7hDhb2KKKCiaSH4wVONl0XMzFtoZtmz3NTYFSUTtFjrRzA/viewform?usp=pp_url&entry.465072047=${encodeURIComponent(studyId)}`
+    : 'https://docs.google.com/forms/d/e/1FAIpQLSdH7hDhb2KKKCiaSH4wVONl0XMzFtoZtmz3NTYFSUTtFjrRzA/viewform';
+
+  const banner = document.createElement('div');
+  banner.id = 'discourse-lab-survey-banner';
+  banner.style.cssText = `
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #ffffff;
+    border: 1px solid #e4e4e7;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+    padding: 20px 24px;
+    z-index: 999999;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    max-width: 420px;
+    width: calc(100% - 48px);
+    direction: rtl;
+  `;
+
+  banner.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+      <div>
+        <p style="margin:0 0 4px;font-size:15px;font-weight:600;color:#09090b;">
+          🎉 סיימת את הניסוי!
+        </p>
+        <p style="margin:0 0 14px;font-size:13px;color:#71717a;line-height:1.5;">
+          הגיע הזמן למלא את שאלון הסיום. Study ID שלך: <strong style="color:#9333ea;">${studyId || '—'}</strong>
+        </p>
+        <a href="${formUrl}" target="_blank" style="
+          display:inline-block;
+          background:#9333ea;
+          color:#fff;
+          padding:8px 18px;
+          border-radius:6px;
+          text-decoration:none;
+          font-size:13px;
+          font-weight:500;
+        ">📋 למילוי השאלון</a>
+      </div>
+      <button id="discourse-lab-banner-close" style="
+        background:none;border:none;cursor:pointer;
+        color:#71717a;font-size:18px;padding:0;line-height:1;
+        flex-shrink:0;
+      ">✕</button>
+    </div>
+  `;
+
+  document.body.appendChild(banner);
+
+  document.getElementById('discourse-lab-banner-close').addEventListener('click', () => {
+    banner.remove();
+    // Show again after 30 minutes if not clicked
+    setTimeout(() => {
+      chrome.storage.local.get('surveyCompleted', ({ surveyCompleted }) => {
+        if (!surveyCompleted) showSurveyBanner(studyId);
+      });
+    }, 30 * 60 * 1000);
+  });
+}
+
+// Listen for trigger from background
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.type === 'SHOW_SURVEY_BANNER') {
+    chrome.storage.local.get(['studyId', 'surveyCompleted'], ({ studyId, surveyCompleted }) => {
+      if (!surveyCompleted) showSurveyBanner(studyId);
+    });
+  }
+});
