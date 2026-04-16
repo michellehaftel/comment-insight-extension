@@ -925,12 +925,18 @@ function isEscalating(text) {
       // Gender / orientation
       'פמיניסטיות','פמיניסטים','הומואים','לסביות','טרנסים'
     ];
-    const hebrewGroupNegative = /(?:\s+תמיד|\s+אף\s+פעם|\s+לעולם|\s+כולם|\s+הורסים|\s+אשמים|\s+גרמו|\s+בגלל|\s+שונאים|\s+מסוכנים|\s+מזיקים|\s+מרעילים|\s+מחריבים|\s+כושלים|\s+רעים|\s+גרועים|\s+מטורפים|\s+מחרפנים|\s+לא\s+שווים|\s+לא\s+בסדר|\s+סכנה|\s+בעיה|\s+אסון)/;
+    const hebrewGroupNegative = /(?:\s+תמיד|\s+אף\s+פעם|\s+לעולם|\s+כולם|\s+הורסים|\s+אשמים|\s+גרמו|\s+בגלל|\s+שונאים|\s+מסוכנים|\s+מזיקים|\s+מרעילים|\s+מחריבים|\s+כושלים|\s+רעים|\s+גרועים|\s+מטורפים|\s+מחרפנים|\s+לא\s+שווים|\s+לא\s+בסדר|\s+סכנה|\s+בעיה|\s+אסון|\s+אותו\s+הדבר|\s+כולם\s+אותו|\s+ידועים|\s+כבר\s+ידועים)/;
     hebrewGroupLabels.forEach(label => {
       if (new RegExp(label + hebrewGroupNegative.source).test(trimmedText)) {
         hebrewScore += 2;
         hebrewReasons.push('Hebrew derogatory group label as attack');
         hebrewECPM.push('cognitive'); // generalizing/categorical talk per ECPM
+      }
+      // "כל ה[group]" standalone — categorical dismissal of a whole group (+1.5)
+      if (new RegExp('כל\\s+ה' + label).test(trimmedText)) {
+        hebrewScore += 1.5;
+        hebrewReasons.push('Hebrew categorical group dismissal (כל ה...)');
+        hebrewECPM.push('cognitive');
       }
     });
 
