@@ -615,7 +615,7 @@ function isEscalating(text) {
   const trimmedText = text.trim();
   
   // Minimum length threshold
-  if (trimmedText.length < 8 && !hasHighRiskKeywords(trimmedText)) {
+  if (trimmedText.length < 6 && !hasHighRiskKeywords(trimmedText)) {
     return { isEscalatory: false, escalationType: 'none' };
   }
 
@@ -643,7 +643,9 @@ function isEscalating(text) {
       'סרחון','דביל','דבילה','מפגר','מפגרת','עלוב','עלובה'
     ];
     const yaInsultPattern = new RegExp('יא\\s+(' + yaInsultWords.join('|') + ')', 'i');
-    if (/יא\s+\S/.test(trimmedText) && !yaInsultPattern.test(trimmedText)) {
+    // Only short-circuit if text is just "יא + one word" — multi-word phrases (e.g. "יא חי בסרט") need full pattern check
+    const yaWordCount = trimmedText.trim().split(/\s+/).length;
+    if (/יא\s+\S/.test(trimmedText) && !yaInsultPattern.test(trimmedText) && yaWordCount <= 2) {
       return { isEscalatory: false, escalationType: 'none', reasons: ['יא + non-insult word — compliment or neutral'] };
     }
 
@@ -713,7 +715,8 @@ function isEscalating(text) {
       'אפס מאופס','חדל אישים','נמושה','רכיכה',
       'חסר תועלת','קישוט','פסיק',
       'טעות של הטבע','כלי ריק','קליפת השום',
-      'שבר כלי','פסולת אנושית','סרח עודף',
+      'שבר כלי','פסולת אנושית','סרח עודף','נזק','חסר תקנה','חסרת תקנה',
+      'פוזאיסט','פוזאיסטית','פוזאיסטים','פוזאיסטיות',
       'צל של בן אדם','גוש בשר','דחליל',
       'חרפת המין האנושי','זנב לאריות',
       'פתי','פתיה','פתאים',
@@ -844,10 +847,19 @@ function isEscalating(text) {
       /מי\s+ביקש\s+(?:את\s+)?דעתך/,
       /(?:צא|צאי|תצא|תצאי)\s+(?:כבר\s+)?מהבועה/,
       /(?:צא|צאי|תצא|תצאי)\s+(?:כבר\s+)?מה(?:בועה|מנהרה|ראש)/,
-      /(?:חי[אהתם]?|חיים|חיות|לחיות|תחי[הי]?|יחי[הי]?)\b.{0,20}בסרט/,
-      /בסרט.{0,20}(?:חי[אהתם]?|חיים|חיות|לחיות)/,
+      // Passive-aggressive silencing — "כדאי היה לשמור לעצמך"
+      /היה\s+עדיף\s+(?:אם\s+)?(?:היית|תהיה|תהיי)\s+(?:שומר|שומרת)\s+.{0,20}לעצמ(?:ך|ו|ה)/,
+      /(?:לא\s+)?(?:חייב|חייבת)\s+לשתף\s+כל\s+(?:מחשבה|דעה|רגש|פוסט)/,
+      /אפשר\s+(?:גם\s+)?לא\s+לשתף/,
+      /(?:דעתך|דעתו|דעתה)\s+(?:לא\s+)?נשאלה/,
+      /(?:לא\s+)?(?:כדאי|עדיף)\s+(?:היה\s+)?(?:לך\s+)?לשמור\s+.{0,15}לעצמ(?:ך|ו|ה)/,
+      // "מייצר רעש בלי תוכן" — dismissal of substance
+      /מייצר[תת]?\s+(?:רק\s+)?רעש\s+(?:בלי|ללא)\s+תוכן/,
+      /(?:אין\s+(?:לך|לו|לה)\s+)?(?:שום\s+)?תוכן\s+(?:מאחורי|מתחת\s+ל|מעבר\s+ל)\s*.{0,20}(?:דברים|מילים|פוסטים)/,
+      // "תחזור ל[פלטפורמה], X גדול/קטן עליך"
+      /(?:תחזור|תחזרי|לך)\s+ל(?:טוויטר|פייסבוק|אינסטגרם|טיקטוק|רדיט|וואטסאפ|טלגרם)/,
+      /(?:פייסבוק|טוויטר|אינסטגרם|טיקטוק|רדיט)\s+(?:גדול|קטן|לא\s+מתאים)\s+עליך/,
       /(?:אתה|את)\s+(?:גר[אה]?\s+ב)(?:עולם\s+אחר|עולם\s+דמיוני|ממד\s+אחר)/,
-      /יש\s+לך\s+את\s+זה\s+ביותר\s+(?:פופוליסטי|שטחי|עמום|מגוחך|מגושם|טיפשי|דבילי|מפגר|אידיוטי|נאיבי|פרימיטיבי|ילדותי|מביך|עלוב|גרוע|גנרי|ריק|מקומם|מרושע|מחורבן|פרנואידי|חרדתי|מוגזם|חומרי|מסיט|רדוד|משמים|חסר\s+תוכן|חסר\s+בסיס|חסר\s+היגיון)/,
       // "[negative noun] שלך/שלכם" — dismissal via naming a negative trait/behavior
       new RegExp(
         '(?:[הובלכמשד])?' +
@@ -883,6 +895,21 @@ function isEscalating(text) {
         hebrewECPM.push('emotional');
       }
     });
+
+    // "יש לך את זה ביותר X" — sarcastic dismissal of substance (+2.5)
+    if (/יש\s+לך\s+את\s+זה\s+ביותר\s+(?:פופוליסטי|שטחי|עמום|מגוחך|מגושם|טיפשי|דבילי|מפגר|אידיוטי|נאיבי|פרימיטיבי|ילדותי|מביך|עלוב|גרוע|גנרי|ריק|מקומם|מרושע|מחורבן|פרנואידי|חרדתי|מוגזם|חומרי|מסיט|רדוד|משמים|חסר\s+תוכן|חסר\s+בסיס|חסר\s+היגיון)/.test(trimmedText)) {
+      hebrewScore += 2.5;
+      hebrewReasons.push('Hebrew sarcastic dismissal (יש לך את זה ביותר)');
+      hebrewECPM.push('emotional');
+    }
+
+    // "חי בסרט" — living in a movie (delusional/disconnected), strong dismissal (+2.5)
+    if (/(?:חי[אהתם]?|חיים|חיות|לחיות|תחי[הי]?|יחי[הי]?)(?=[\s,\.!?״"'()]|$).{0,20}בסרט/.test(trimmedText) ||
+        /(?:ב)?סרט.{0,30}(?:חי[אהתם]?|חיים|חיות|לחיות|תחי[הי]?|יחי[הי]?)/.test(trimmedText)) {
+      hebrewScore += 2.5;
+      hebrewReasons.push('Hebrew dismissal - living in a movie');
+      hebrewECPM.push('emotional');
+    }
 
     // Category 6: Derogatory group label + negative predicate (+2)
     const hebrewGroupLabels = [
@@ -933,7 +960,14 @@ function isEscalating(text) {
       hebrewECPM.push('emotional');
     }
     const hebrewJudgingPatterns = [
+      // "הכל אצלך זה [שלילי]" — total dismissal of person's motives/behavior
+      /הכל\s+אצל(?:ך|ו|ה|כם|כן|הם|הן)\s+(?:זה|הוא|היא)\s+(?:פוזה|פוזות|תרגיל|שקר|שקרים|הצגה|בלוף|מניפולציה|תחפושת|מסכה|פוליטיקה|חרא|בולשיט|שטויות|אגו|נרקיסיזם|כסף|אינטרסים|חישובים|טקטיקה)/,
       /(?:אתה|את) (?:כזה|כזאת|ממש|פשוט) (?:נורא|נוראי|נוראית|איום|איומה|מגעיל|מגעילה|מחריד|מחרידה|מביש|מבישה|עלוב|עלובה|מצחיק|מצחיקה|עצוב|עצובה)/,
+      /(?:אתה|את)\s+פשוט\s+(?:חסר|חסרת)\s+(?:תקנה|בסיס|היגיון|מצפון|כבוד|עמוד שדרה|בושה|ערכים|תודעה|אחריות)/,
+      // Rhetorical belittling questions — "זו הרמה הכי גבוהה שהגעת?"
+      /(?:זו|זה|זאת)\s+ה(?:רמה|יכולת|הישג|תרומה|תגובה|טענה|תשובה)\s+הכי\s+(?:גבוהה?|טובה?|חכמה?|עמוקה?)\s+ש(?:הצלחת|יכולת|אתה\s+מסוגל|את\s+מסוגלת)/,
+      /(?:עד\s+כאן|רק\s+עד\s+פה)\s+(?:הגעת|הגעתם|יכולת|אתה\s+מגיע)/,
+      /זה\s+(?:הכי\s+טוב|הכי\s+חכם|כל\s+מה)\s+ש(?:יש\s+לך|אתה\s+יכול|יכולת)\s+(?:להגיד|להציע|לתרום)/,
       /(?:אתה|את) (?:אדם|בן אדם|יצור) (?:נורא|נוראי|נוראית|איום|איומה|מגעיל|מגעילה|מחריד|מחרידה|מביש|מבישה)/,
       /איזה (?:בן אדם|יצור|דמות|אדם) (?:עצוב|עצובה|עלוב|עלובה|מביש|מבישה|נורא|נוראי|מגעיל|מגעילה)/,
       /(?:אתה|את) (?:הכי|הדבר הכי) (?:נורא|גרוע|גרועה|מגעיל|מגעילה|עלוב|עלובה|מביש|מבישה)/,
@@ -947,6 +981,7 @@ function isEscalating(text) {
       /(?:אתה|את) (?:פשוט\s+)?(?:בדיחה|פארסה|קריקטורה|מיים|ג'וק|ג׳וק|סאטירה)(?:\s+(?:מהלכת?|חיה|של\s+\w+))?/,
       /(?:אתה|את) (?:בושה|חרפה|גנאי|ביזיון|קלון) (?:ל|של)/,
       /(?:אתה|את) (?:ה)?(?:בושה|חרפה|ביזיון|קלון) (?:של|ל|למדינה|למשפחה|לחברה|לדור)/,
+      /איזה\s+(?:נזק|אסון|כישלון|ביזיון|פיאסקו|חרפה|בושה|אפס|חדל\s+אישים|עלוב)\s+(?:אתה|את|זה|הוא|היא)/,
       /(?:ביב|נתניהו|גנץ|\w+) (?:הוא|היא) (?:אדם|יצור|בן אדם|ה)?(?:נורא|נוראי|נוראית|מגעיל|מגעילה|מחריד|מחרידה|מביש|מבישה|עלוב|עלובה|שרלטן|רמאי|שקרן)/
     ];
     hebrewJudgingPatterns.forEach(p => {
@@ -1002,6 +1037,10 @@ function isEscalating(text) {
       /הצד\s+שלנו\b.{1,40}הצד\s+של(?:כם|הם)/,
       // "אנשים כמונו" vs "אנשים כמוכם/כמוהם"
       /כמונו\b.{1,30}כמו(?:כם|הם)\b/,
+      // "אתה/את וכל ה[group]" — lumping person into outgroup
+      /(?:אתה|את|אתם|אתן)\s+וכל\s+ה(?:שמאלנים|ימנים|חרדים|חילונים|ערבים|ביביסטים|אשכנזים|מזרחים|דתיים|מתנחלים|ליברלים|לאומנים|פשיסטים|קומוניסטים|ציונים|פלסטינאים|בוגדים|בוטים|שקרנים|מסיתים)/,
+      // "אתה בדיוק כמו כל ה[group]" — equivalence with group
+      /(?:אתה|את)\s+(?:בדיוק\s+)?כמו\s+כל\s+ה(?:שמאלנים|ימנים|חרדים|חילונים|ערבים|ביביסטים|אשכנזים|מזרחים|דתיים|מתנחלים|ליברלים|לאומנים)/,
     ];
     weVsThemPatterns.forEach(p => {
       if (p.test(trimmedText)) {
@@ -3021,10 +3060,29 @@ async function createEscalationTooltip(originalText, element, escalationType = '
       allowManualRephrase = true; // Allow user to dismiss and edit manually
       console.log("❌ Rephrasing failed due to error - escalation was detected but API call failed");
     } else if (rephrasedText === null) {
-      // API confirmed: NOT escalatory — remove tooltip silently (same behaviour as local non-escalatory detection).
+      // API confirmed: NOT escalatory — remove tooltip silently.
       console.log("✅ API returned null — text is not escalatory, removing tooltip");
       tooltip.remove();
       justRephrased = false;
+      // Still log this interaction: local detection fired but API confirmed not escalatory.
+      // Important research data — tracks false positives from local detector.
+      if (!lastLoggedInteraction?.interactionId) {
+        const interactionId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+          ? crypto.randomUUID()
+          : (`${Date.now()}-${Math.random().toString(36).slice(2)}`);
+        lastLoggedInteraction = { interactionId, didUserAccept: 'not_applicable', botType: botType || 'angel' };
+        logInteraction({
+          usersOriginalContent: originalText,
+          rephraseSuggestion: '',
+          didUserAccept: 'not_applicable',
+          actualPostedText: '',
+          timeToRephraseSeconds: timeToRephraseSeconds || '',
+          escalationType,
+          isEscalating: false,
+          botType: botType || 'angel',
+          interactionId
+        });
+      }
       return;
     } else {
       // Empty string or other unexpected value - treat as error

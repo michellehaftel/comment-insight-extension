@@ -74,7 +74,7 @@ function doPost(e) {
           .setHeaders(cors);
       }
       const idCol = 19; // Column S = interaction_id
-      const dataRange = sheet.getRange(2, idCol, lastRow, idCol); // Row 2 = first data row (row 1 is header)
+      const dataRange = sheet.getRange(2, idCol, lastRow - 1, 1); // Row 2 = first data row; read only col S
       const values = dataRange.getValues();
       let rowIndex = -1;
       for (let i = 0; i < values.length; i++) {
