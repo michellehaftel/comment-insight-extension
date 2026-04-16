@@ -371,7 +371,7 @@ JSON ONLY.`;
 // Main proxy endpoint (rate limiter removed - AI services have their own rate limits)
 app.post('/api/rephrase', validateRequest, async (req, res) => {
   try {
-    const { text, context, model, temperature, max_tokens, top_p, bot_type = 'angel' } = req.body;
+    const { text, context, model, temperature, max_tokens, top_p, bot_type = 'angel', user_gender = 'unknown' } = req.body;
     
     // Select prompt based on bot type (angel = de-escalation, devil = escalation)
     let prompt;
@@ -425,9 +425,19 @@ app.post('/api/rephrase', validateRequest, async (req, res) => {
       contextText = 'No context provided - this appears to be an original post (not a reply)';
     }
     
+    // Build gender instruction for Hebrew first-person agreement
+    // Only applies to first-person (אני) — second person (אתה/את) is UNKNOWN and must not be assumed
+    let genderInstruction = '';
+    if (user_gender === 'female') {
+      genderInstruction = `\n\nHEBREW GENDER AGREEMENT (CRITICAL): The user who wrote this text is FEMALE. When your rephrased suggestion uses first-person Hebrew (אני + verb/adjective), use feminine forms: אני מרגישה (not מרגיש), אני חושבת (not חושב), אני אומרת (not אומר), etc. Do NOT use slashes (מרגיש/ה). IMPORTANT: Do NOT assume the gender of the person being addressed (second person) — you cannot know if they are male or female. Keep second-person forms neutral or as-is.`;
+    } else if (user_gender === 'male') {
+      genderInstruction = `\n\nHEBREW GENDER AGREEMENT (CRITICAL): The user who wrote this text is MALE. When your rephrased suggestion uses first-person Hebrew (אני + verb/adjective), use masculine forms: אני מרגיש (not מרגישה), אני חושב (not חושבת), אני אומר (not אומרת), etc. Do NOT use slashes (מרגיש/ה). IMPORTANT: Do NOT assume the gender of the person being addressed (second person) — you cannot know if they are male or female. Keep second-person forms neutral or as-is.`;
+    }
+
     // Replace placeholders in prompt
     let fullPrompt = prompt.replace(/\{TEXT\}/g, text);
     fullPrompt = fullPrompt.replace(/\{CONTEXT\}/g, contextText);
+    if (genderInstruction) fullPrompt += genderInstruction;
     
     let responseText = '';
     

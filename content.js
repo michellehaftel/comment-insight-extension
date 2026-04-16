@@ -1800,6 +1800,9 @@ async function rephraseViaAPI(text, context = null, botType = 'angel') {
       console.warn('⚠️ Rephrase: original post context was truncated to', MAX_CONTEXT_LEN, 'chars for sending.');
     }
 
+    // Get user gender for first-person Hebrew agreement in the rephrase suggestion
+    const { userGender: senderGender } = await chrome.storage.local.get('userGender');
+
     // Prepare request (proxy uses ECPM_PROMPT env or its default prompt — same quality as before)
     const requestBody = {
       text: textToSend,
@@ -1813,7 +1816,8 @@ async function rephraseViaAPI(text, context = null, botType = 'angel') {
       temperature: API_CONFIG.temperature || 1.0,
       max_tokens: API_CONFIG.max_tokens || 2048,
       top_p: API_CONFIG.top_p || 1.0,
-      bot_type: botType || 'angel'
+      bot_type: botType || 'angel',
+      user_gender: senderGender || 'unknown'
     };
 
     console.log('🤖 Calling proxy server for rephrasing...');
