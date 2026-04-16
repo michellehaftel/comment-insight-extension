@@ -99,6 +99,63 @@
       font-size: 28px;
       margin-bottom: 6px;
     }
+
+    .bot-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 12px;
+      padding: 12px 14px;
+      background: #ffffff;
+      border: 1px solid #e4e4e7;
+      border-radius: 8px;
+    }
+
+    .bot-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: #09090b;
+    }
+
+    .bot-label span {
+      font-size: 11px;
+      color: #71717a;
+      font-weight: 400;
+      display: block;
+      margin-top: 2px;
+    }
+
+    .toggle-switch {
+      display: flex;
+      background: #f4f4f5;
+      border-radius: 6px;
+      padding: 2px;
+      gap: 2px;
+    }
+
+    .toggle-btn {
+      padding: 5px 12px;
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      background: transparent;
+      color: #71717a;
+      transition: all 0.15s ease;
+    }
+
+    .toggle-btn.active-angel {
+      background: #ffffff;
+      color: #7c3aed;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    }
+
+    .toggle-btn.active-devil {
+      background: #ffffff;
+      color: #dc2626;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    }
   </style>
 </head>
 <body>
@@ -110,6 +167,17 @@
   
   <div class="status">
     ✅ Active and monitoring
+  </div>
+
+  <div class="bot-toggle">
+    <div class="bot-label">
+      Mode
+      <span id="botDescription">De-escalation assistant</span>
+    </div>
+    <div class="toggle-switch">
+      <button class="toggle-btn" id="angelBtn">😇 Angel</button>
+      <button class="toggle-btn" id="devilBtn">😈 Devil</button>
+    </div>
   </div>
   
   <div class="content">
