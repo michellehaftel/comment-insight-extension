@@ -615,7 +615,7 @@ function isEscalating(text) {
   const trimmedText = text.trim();
   
   // Minimum length threshold
-  if (trimmedText.length < 8 && !hasHighRiskKeywords(trimmedText)) {
+  if (trimmedText.length < 6 && !hasHighRiskKeywords(trimmedText)) {
     return { isEscalatory: false, escalationType: 'none' };
   }
 
@@ -625,17 +625,16 @@ function isEscalating(text) {
   const hasNonLatin = containsNonLatin(trimmedText);
   const hasHebrew = containsHebrew(trimmedText);
 
-  // For non-English text (especially Hebrew), rely on API for detection
+  // Hebrew local scoring — mirrors English detection logic.
+  // Score 0 → not escalatory, no API call. Score > 0 → API makes final call.
   if (hasHebrew || (hasNonLatin && USE_API)) {
-    // If text ends with "יא" (with nothing after), the user is still mid-sentence.
-    // "יא" alone is not escalatory — it's just the address particle waiting for a word.
+
+    // Guard 1: incomplete יא — user still typing
     if (/יא\s*$/.test(trimmedText)) {
       return { isEscalatory: false, escalationType: 'none', reasons: ['Incomplete יא — user still typing'] };
     }
 
-    // "יא" + word: only escalatory if the word after it is a known insult.
-    // Anything else (compliments, nicknames, neutral words) = not escalatory.
-    // Negative list is bounded; positive list is infinite — so we flip the logic.
+    // Guard 2: יא + word — only escalatory if the word is a known insult
     const yaInsultWords = [
       'זבל','אשפה','מטומטם','מטומטמת','טיפש','טיפשה','שוטה','אידיוט','אידיוטית',
       'בהמה','חמור','חמורה','כלב','כלבה','פרה','חזיר','חזירה',
@@ -644,20 +643,433 @@ function isEscalating(text) {
       'סרחון','דביל','דבילה','מפגר','מפגרת','עלוב','עלובה'
     ];
     const yaInsultPattern = new RegExp('יא\\s+(' + yaInsultWords.join('|') + ')', 'i');
-    if (/יא\s+\S/.test(trimmedText) && !yaInsultPattern.test(trimmedText)) {
-      return { isEscalatory: false, escalationType: 'none', reasons: ['יא + non-insult word — compliment or neutral, not escalatory'] };
+    // Only short-circuit if text is just "יא + one word" — multi-word phrases (e.g. "יא חי בסרט") need full pattern check
+    const yaWordCount = trimmedText.trim().split(/\s+/).length;
+    if (/יא\s+\S/.test(trimmedText) && !yaInsultPattern.test(trimmedText) && yaWordCount <= 2) {
+      return { isEscalatory: false, escalationType: 'none', reasons: ['יא + non-insult word — compliment or neutral'] };
     }
 
-    // If we have substantial text in Hebrew, assume it might be escalatory
-    // and let the API do the real detection
-    if (trimmedText.length >= 10) {
-      return {
-        isEscalatory: true,
-        escalationType: 'unknown',
-        reasons: ['Non-English text detected - using API for detection'],
-        requiresAPI: true // Flag to indicate API should be used
-      };
+    // ── Hebrew local scoring ──────────────────────────────────────────────────
+    let hebrewScore = 0;
+    const hebrewReasons = [];
+    const hebrewECPM = []; // 'cognitive' | 'emotional' — per ECPM model
+
+    // Category 1: Direct insults / profanity (+3)
+    const hebrewInsultWords = [
+      // Animals (as direct insults)
+      'כלב','כלבה','חמור','חמורה','פרה','חזיר','חזירה','בהמה','חמורים','כלבים',
+      'בבון','קרפדה','נחש',
+
+      // Stupidity / cognitive
+      'טיפש','טיפשה','טיפשים','טיפשות',
+      'מטומטם','מטומטמת','מטומטמים','מטומטמות','טמטום',
+      'אידיוט','אידיוטית','אידיוטים','אידיוטיות',
+      'דביל','דבילה','דבילים','דבילות',
+      'מפגר','מפגרת','מפגרים','מפגרות',
+      'קרטין','קרטינית','קרטינים',
+      'מורון','מורונית','מורונים',
+      'שוטה','שוטים','שוטות',
+      'אהבל','אהבלית','אימבציל','דגנרט',
+      'כסיל','בער','עילג','סתום','חלול','אטום',
+      'בלטה','נעל','עציץ',
+      'חלאולאו',
+      'רפה שכל','חסר בינה','חסר דעת',
+      'מוח של ציפור','מוח של נמלה','מוח חלול','ראש כרוב','מוח של נעל',
+      'אטום במוח','אטום כקיר','סתום כלוט','סתום בלום',
+      'בור וניער','בור','בורה','עם הארץ',
+      'קצר רואי','עילג מחשבתית','מאותגר שכלית',
+      'חמור גרם','אהבל מושרש','רפיון שכלי',
+
+      // Moral corruption
+      'צבוע','צבועה','צבועים','צבועות','צבוע בן צבוע',
+      'שקרן','שקרנית','שקרנים','שקרניות',
+      'רמאי','רמאית','רמאים','רמאיות',
+      'נוכל','נוכלת','נוכלים','נוכלות',
+      'נלוז','נלוזה','שפל','שפלה',
+      'נבזה','נאלח','נתעב','מופקר',
+      'מושחת','מושחתת','מושחתים','מושחתות',
+      'מנוול','נבל','נבלה','רשע','רשעה',
+      'מרושע','מרושעת','מרושעים','מרושעות',
+      'סמרטוט','עבד נרצע','מלחך פנכה','חנפן','לקקן','תככן',
+      'בוגד','מלשין','שטינקר','חלאה','שרץ',
+      'ערמומי','חלקלק','מתחסד','טהרן',
+      'מוכר לוקשים','עוכר ישראל','סחי','עוכר',
+      'צמא דם','לב אבן','חסר צלם אנוש',
+      'טינופת','עשקן','מוצץ דם','רודף בצע',
+      'עז פנים','קשה עורף','נחש בריח',
+      'שרלטן','שרלטנית','שרלטנים',
+
+      // Disgust / physical repulsion
+      'מגעיל','מגעילה','מחריד','מחרידה',
+      'גועל נפש','מעורר בחילה','מאוס','דוחה',
+      'אשפה','זבל','סרחון','טינופת','ביוב',
+      'תת-אדם','תת-רמה','פרא אדם','ברברי',
+      'בהמת משא','חיית השדה','חיית אדם',
+      'פגע רע','גידול פרא','פרימיטיבי',
+      'ערס','פרחה','שלוח',
+
+      // Failure / worthlessness
+      'עלוב','עלובה','עלובים','עלובות','עלוב נפש','עלוב חיים',
+      'מביש','מבישה','כישלון',
+      'לוזר','לוזרית','לוזרים',
+      'אפס מאופס','חדל אישים','נמושה','רכיכה',
+      'חסר תועלת','קישוט','פסיק',
+      'טעות של הטבע','כלי ריק','קליפת השום',
+      'שבר כלי','פסולת אנושית','סרח עודף','נזק','חסר תקנה','חסרת תקנה',
+      'פוזאיסט','פוזאיסטית','פוזאיסטים','פוזאיסטיות',
+      'צל של בן אדם','גוש בשר','דחליל',
+      'חרפת המין האנושי','זנב לאריות',
+      'פתי','פתיה','פתאים',
+
+      // Personality / social
+      'מגלומן','נרקיסיסט','סוציופת','פסיכופת','סוציומט',
+      'יהיר','שחצן','פלצן','זחוח','נפוח מחשיבות עצמית',
+      'טרחן','קרציה','עלוקה','חופר','נודניק',
+      'מתנשא','מנותק','הזוי','סהרורי','מטורלל',
+      'מוכה כלבת','פרנואיד','אגואיסט',
+      'מוכה ירח','אובססיבי','חולני','נקמני',
+      'מתוסכל','קנאי חולני','מיזנתרופ',
+      'תחמן','דוחף אף','חסר טקט',
+      'מוכה סנוורים','משוגע לדבר אחד',
+      'מניאק','מניאקית','פסיכו',
+      'משוגע','משוגעת','משוגעים','משוגעות',
+
+      // Political / online discourse
+      'פשיסט','פשיסטית','פשיסטים',
+      'נאצי','נאצית','נאצים','יודונאצי','יודנראט',
+      'בוט','שופר','תעמלן','פנאט','פודל',
+      'מתוכנת','בובת על חוט','משת"פ','קוויזלינג',
+      'שטוף מוח','קיצוני','אנטי-ציוני',
+      'גזען','חשוך','אידיוט שימושי',
+      'טרול','טרול בשכר','מכונת רעל',
+      'מסית ומדיח','מחרחר ריב','לקקן חצר',
+      'חייל של מקלדת','צייצן','שופר מטעם',
+      'חסר עמוד שדרה אינטלקטואלי',
+
+      // Parasites
+      'טפיל','טפילה','טפילים',
+      'פחדן','פחדנית','פחדנים',
+    ];
+    // Support Hebrew prefixes: ו/ב/ל/כ/מ/ש/ה before insult words (e.g. "ועלובה", "כמטומטם")
+    const hebrewInsultRx = new RegExp(
+      '(?:^|[\\s,\\.!?״""\'()])(?:[ובלכמשה])?(?:' + hebrewInsultWords.join('|') + ')(?=$|[\\s,\\.!?״""\'()])'
+    );
+    if (hebrewInsultRx.test(trimmedText)) {
+      hebrewScore += 3;
+      hebrewReasons.push('Hebrew insult/profanity');
+      hebrewECPM.push('emotional');
     }
+    if (/פשיסט|נאצי|נאצים|פשיסטים/.test(trimmedText)) {
+      hebrewScore += 3;
+      hebrewReasons.push('Extreme political slur');
+      hebrewECPM.push('emotional');
+    }
+
+    // Category 2: Blame patterns (+2.5)
+    const hebrewBlamePatterns = [
+      /בגללך/,
+      /בגלל\s+אנשים\s+כמוך/,
+      /אשמתך/,
+      /(?:אתה|את|אתם|אתן)\s+אשמ/,
+      /(?:אתה|את|אתם|אתן)\s+גרמת|אתם\s+גרמתם/,
+      /בגלל\s+מה\s+שאתה\s+עשית/,
+      /(?:אתה|את|אתם|אתן)\s+(?:הרסת|הרסתם|הרסתן)/,
+      /בגלל\s+(?:אנשים\s+כמוך|כמוך)/,
+    ];
+    hebrewBlamePatterns.forEach(p => {
+      if (p.test(trimmedText)) {
+        hebrewScore += 2.5;
+        hebrewReasons.push('Hebrew blame/accusation');
+        hebrewECPM.push('emotional');
+      }
+    });
+
+    // Spread-of-negativity: [verb of spreading] + [negative noun] (+2)
+    const spreadVerbs = '(?:להפיץ|מפיץ|מפיצה|מפיצים|תפיץ|תפיצו|הפצת|לשפוך|שופך|שופכת|שופכים|תשפוך|לשדר|משדר|משדרת|לזהם|מזהם|מזהמת|מזהמים|תזהם|להרעיל|מרעיל|מרעילה|מרעילים|תרעיל|לטמא|מטמא|מטמאת|לכלך|מכלך|מכלכת|להסית|מסית|מסיתה|מסיתים|תסית|לזרוע|זורע|זורעת|זורעים|תזרע|לייצר|מייצר|מייצרת)';
+    const spreadNouns = '(?:רעל|ארס|שנאה|הסתה|זוהמה|טינופת|שקרים|שקר|בלבול|פחד|פניקה|מרירות|כאוס|אנרכיה|פירוד|פיצול|מחלוקת|קנאה|שנאת חינם|אלימות|טרור|פשע|ריקבון|השחתה|פגע|ייאוש|דיכאון|כעס|זעם|חרדה|פרנויה|הסתה לאלימות)';
+    const spreadRx = new RegExp(spreadVerbs + '\\s+(?:את\\s+ה|ה)?' + spreadNouns);
+    if (spreadRx.test(trimmedText)) {
+      hebrewScore += 2;
+      hebrewReasons.push('Hebrew spread-of-negativity pattern');
+      hebrewECPM.push('emotional');
+    }
+
+    // Category 3: Accusatory "you" + absolutes (+2)
+    const hebrewAccusatoryPatterns = [
+      /(?:אתה|את|אתם|אתן)\s+תמיד/,
+      /(?:אתה|את|אתם|אתן)\s+אף\s+פעם/,
+      /(?:אתה|את|אתם|אתן)\s+לעולם\s+לא/,
+      /(?:אתה|את|אתם|אתן)\s+כל\s+כך\s+/,
+      /(?:אתה|את|אתם|אתן)\s+כזה\s+/,
+      /(?:אתה|את)\s+(?:לא\s+)?מבינ/,
+    ];
+    hebrewAccusatoryPatterns.forEach(p => {
+      if (p.test(trimmedText)) {
+        hebrewScore += 2;
+        hebrewReasons.push('Hebrew accusatory "you" + absolute');
+        hebrewECPM.push('emotional'); // blame directed at "you"
+      }
+    });
+
+    // Category 4: Categorical / absolute language (+1, up to +2)
+    const hebrewCategoricalPatterns = [
+      /תמיד/, /אף\s+פעם/, /לעולם\s+לא/, /כולם/, /אף\s+אחד/,
+      /הכל/, /כלום/, /בהחלט/, /ללא\s+יוצא\s+מן\s+הכלל/
+    ];
+    let hebrewCategoricalCount = 0;
+    hebrewCategoricalPatterns.forEach(p => {
+      const m = trimmedText.match(new RegExp(p.source, 'g'));
+      if (m) hebrewCategoricalCount += m.length;
+    });
+    if (hebrewCategoricalCount >= 3) {
+      hebrewScore += 2; hebrewReasons.push('Multiple Hebrew categorical terms'); hebrewECPM.push('cognitive');
+    } else if (hebrewCategoricalCount >= 1) {
+      hebrewScore += 1; hebrewReasons.push('Hebrew categorical/absolute language'); hebrewECPM.push('cognitive');
+    }
+
+    // Category 5: Dismissal (+1.5)
+    const hebrewDismissalPatterns = [
+      /שטויות/,
+      /זה\s+לא\s+נכון/,
+      /(?:אתה|את)\s+טועה/,
+      /אתם\s+טועים/,
+      /אין\s+לך\s+מושג/,
+      /(?:אתה|את)\s+לא\s+מבינ/,
+      /זה\s+לא\s+משנה/,
+      /לא\s+מעניין\s+אותי/,
+      /אין\s+לזה\s+שחר/,
+      /חזור\s+לחור\s+שממנו\s+יצאת/,
+      /לך\s+מפה/,
+      /תעלם\s+מפה/,
+      /אין\s+טעם\s+(?:להסביר|לדבר|לשוחח)\s+(?:לך|איתך|עמך)/,
+      /אין\s+לך\s+מה\s+(?:לחפש|לעשות)\s+פה/,
+      /מי\s+שאל\s+(?:אותך|אותו|אותה|אתכם)/,
+      /מי\s+ביקש\s+(?:את\s+)?דעתך/,
+      /(?:צא|צאי|תצא|תצאי)\s+(?:כבר\s+)?מהבועה/,
+      /(?:צא|צאי|תצא|תצאי)\s+(?:כבר\s+)?מה(?:בועה|מנהרה|ראש)/,
+      // Passive-aggressive silencing — "כדאי היה לשמור לעצמך"
+      /היה\s+עדיף\s+(?:אם\s+)?(?:היית|תהיה|תהיי)\s+(?:שומר|שומרת)\s+.{0,20}לעצמ(?:ך|ו|ה)/,
+      /(?:לא\s+)?(?:חייב|חייבת)\s+לשתף\s+כל\s+(?:מחשבה|דעה|רגש|פוסט)/,
+      /אפשר\s+(?:גם\s+)?לא\s+לשתף/,
+      /(?:דעתך|דעתו|דעתה)\s+(?:לא\s+)?נשאלה/,
+      /(?:לא\s+)?(?:כדאי|עדיף)\s+(?:היה\s+)?(?:לך\s+)?לשמור\s+.{0,15}לעצמ(?:ך|ו|ה)/,
+      // "מייצר רעש בלי תוכן" — dismissal of substance
+      /מייצר[תת]?\s+(?:רק\s+)?רעש\s+(?:בלי|ללא)\s+תוכן/,
+      /(?:אין\s+(?:לך|לו|לה)\s+)?(?:שום\s+)?תוכן\s+(?:מאחורי|מתחת\s+ל|מעבר\s+ל)\s*.{0,20}(?:דברים|מילים|פוסטים)/,
+      // "תחזור ל[פלטפורמה], X גדול/קטן עליך"
+      /(?:תחזור|תחזרי|לך)\s+ל(?:טוויטר|פייסבוק|אינסטגרם|טיקטוק|רדיט|וואטסאפ|טלגרם)/,
+      /(?:פייסבוק|טוויטר|אינסטגרם|טיקטוק|רדיט)\s+(?:גדול|קטן|לא\s+מתאים)\s+עליך/,
+      /(?:אתה|את)\s+(?:גר[אה]?\s+ב)(?:עולם\s+אחר|עולם\s+דמיוני|ממד\s+אחר)/,
+      // "[negative noun] שלך/שלכם" — dismissal via naming a negative trait/behavior
+      new RegExp(
+        '(?:[הובלכמשד])?' +
+        '(?:' + [
+          // Stupidity
+          'טיפשות','בורות','אטימות','עיוורון','חוסר\\s+הבנה','אי.הבנה',
+          // Internet behavior
+          'טרלול','טרולינג','ספאם','הסתה','פייק','פרופגנדה','דיסאינפורמציה',
+          // Arrogance / insolence
+          'חוצפה','עזות\\s+מצח','עזות','חציפות','יומרנות',
+          // Disgust / low
+          'רפש','ביזיון','קלון','זוהמה','שפלות','נבזות','פחיתות','ארס','רעל','מרירות',
+          // Manipulation / distortion
+          'בלבולי?\\s+שכל','זיוני?\\s+שכל','זיון\\s+מוח','שטיפת\\s+מוח',
+          'הטעיה','מניפולציה','זיוף\\s+מציאות','עיוות\\s+מציאות','עיוות',
+          'הרעלת\\s+מוח','גאזלייטינג',
+          // Lies
+          'שקרנות','כזבים','בדיות','המצאות',
+          // Excess / garbage
+          'הגזמות','שטויות','בלאגן','בולשיט',
+          // Failure
+          'כישלון','פשלות','חוסר\\s+יכולת',
+          // Hate
+          'שנאה','כעס','זעם'
+        ].join('|') +
+        ')(?:\\s+שלך|\\s+שלכם|\\s+שלכן)'
+      ),
+    ];
+    hebrewDismissalPatterns.forEach(p => {
+      if (p.test(trimmedText)) {
+        hebrewScore += 1.5;
+        hebrewReasons.push('Hebrew dismissal');
+        hebrewECPM.push('emotional');
+      }
+    });
+
+    // "יש לך את זה ביותר X" — sarcastic dismissal of substance (+2.5)
+    if (/יש\s+לך\s+את\s+זה\s+ביותר\s+(?:פופוליסטי|שטחי|עמום|מגוחך|מגושם|טיפשי|דבילי|מפגר|אידיוטי|נאיבי|פרימיטיבי|ילדותי|מביך|עלוב|גרוע|גנרי|ריק|מקומם|מרושע|מחורבן|פרנואידי|חרדתי|מוגזם|חומרי|מסיט|רדוד|משמים|חסר\s+תוכן|חסר\s+בסיס|חסר\s+היגיון)/.test(trimmedText)) {
+      hebrewScore += 2.5;
+      hebrewReasons.push('Hebrew sarcastic dismissal (יש לך את זה ביותר)');
+      hebrewECPM.push('emotional');
+    }
+
+    // "חי בסרט" — living in a movie (delusional/disconnected), strong dismissal (+2.5)
+    if (/(?:חי[אהתם]?|חיים|חיות|לחיות|תחי[הי]?|יחי[הי]?)(?=[\s,\.!?״"'()]|$).{0,20}בסרט/.test(trimmedText) ||
+        /(?:ב)?סרט.{0,30}(?:חי[אהתם]?|חיים|חיות|לחיות|תחי[הי]?|יחי[הי]?)/.test(trimmedText)) {
+      hebrewScore += 2.5;
+      hebrewReasons.push('Hebrew dismissal - living in a movie');
+      hebrewECPM.push('emotional');
+    }
+
+    // Category 6: Derogatory group label + negative predicate (+2)
+    const hebrewGroupLabels = [
+      // Political
+      'שמאלנים','ימנים','ביביסטים','ליברלים','פשיסטים','קומוניסטים','ציונים','מתנחלים','פלסטינאים',
+      // Religious / ethnic
+      'חרדים','דתיים','חילונים','מסורתיים','דתלשים','דתל"שים',
+      'אשכנזים','מזרחים','ספרדים','אתיופים','דרוזים','ערבים','בדואים',
+      // Appearance / physical
+      "ג'ינג'ים","ג׳ינג׳ים",'שמנים','רזים',
+      // Geographic / lifestyle
+      'תל אביבים','ירושלמים','מתנשאים',
+      // Gender / orientation
+      'פמיניסטיות','פמיניסטים','הומואים','לסביות','טרנסים'
+    ];
+    const hebrewGroupNegative = /(?:\s+תמיד|\s+אף\s+פעם|\s+לעולם|\s+כולם|\s+הורסים|\s+אשמים|\s+גרמו|\s+בגלל|\s+שונאים|\s+מסוכנים|\s+מזיקים|\s+מרעילים|\s+מחריבים|\s+כושלים|\s+רעים|\s+גרועים|\s+מטורפים|\s+מחרפנים|\s+לא\s+שווים|\s+לא\s+בסדר|\s+סכנה|\s+בעיה|\s+אסון)/;
+    hebrewGroupLabels.forEach(label => {
+      if (new RegExp(label + hebrewGroupNegative.source).test(trimmedText)) {
+        hebrewScore += 2;
+        hebrewReasons.push('Hebrew derogatory group label as attack');
+        hebrewECPM.push('cognitive'); // generalizing/categorical talk per ECPM
+      }
+    });
+
+    // Category 7: Exclamation marks + caps (mirrors English)
+    const hebrewExcl = (trimmedText.match(/!/g) || []).length;
+    if (hebrewExcl >= 2) { hebrewScore += 1; hebrewReasons.push('Multiple exclamation marks'); }
+    else if (hebrewExcl === 1 && trimmedText.length < 80) { hebrewScore += 0.5; hebrewReasons.push('Exclamation mark'); }
+    const hebrewCapsRatio = trimmedText.length > 0 ? (trimmedText.match(/[A-Z]/g) || []).length / trimmedText.length : 0;
+    if (hebrewCapsRatio > 0.25 && trimmedText.length > 15) { hebrewScore += 1.5; hebrewReasons.push('Excessive caps'); }
+    else if (hebrewCapsRatio > 0.15 && trimmedText.length > 30) { hebrewScore += 0.5; hebrewReasons.push('Caps emphasis'); }
+
+    // Category 8: Judging / condemning (+2 to +2.5)
+    if (/אני לא מאמינ[אה] כמה (?:אתה|את) /.test(trimmedText) ||
+        /כמה (?:אתה|את) (?:טיפש|טיפשה|מגוחך|מגוחכת|עצוב|עצובה|נורא|נוראי|נוראית|עלוב|עלובה)/.test(trimmedText)) {
+      hebrewScore += 2.5;
+      hebrewReasons.push('Hebrew judging/condemning (high-weight)');
+      hebrewECPM.push('emotional');
+    }
+    // "כמה אפשר להיות X" / "כמה X אפשר להיות" — rhetorical judging + insult word
+    const kamaEfsharRx = new RegExp(
+      'כמה\\s+(?:אפשר\\s+להיות\\s+|\\S+\\s+אפשר\\s+להיות\\s+)?' +
+      '(?:' + hebrewInsultWords.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')'
+    );
+    if (kamaEfsharRx.test(trimmedText)) {
+      hebrewScore += 2;
+      hebrewReasons.push('Hebrew rhetorical judging structure (כמה אפשר להיות)');
+      hebrewECPM.push('emotional');
+    }
+    const hebrewJudgingPatterns = [
+      // "הכל אצלך זה [שלילי]" — total dismissal of person's motives/behavior
+      /הכל\s+אצל(?:ך|ו|ה|כם|כן|הם|הן)\s+(?:זה|הוא|היא)\s+(?:פוזה|פוזות|תרגיל|שקר|שקרים|הצגה|בלוף|מניפולציה|תחפושת|מסכה|פוליטיקה|חרא|בולשיט|שטויות|אגו|נרקיסיזם|כסף|אינטרסים|חישובים|טקטיקה)/,
+      /(?:אתה|את) (?:כזה|כזאת|ממש|פשוט) (?:נורא|נוראי|נוראית|איום|איומה|מגעיל|מגעילה|מחריד|מחרידה|מביש|מבישה|עלוב|עלובה|מצחיק|מצחיקה|עצוב|עצובה)/,
+      /(?:אתה|את)\s+פשוט\s+(?:חסר|חסרת)\s+(?:תקנה|בסיס|היגיון|מצפון|כבוד|עמוד שדרה|בושה|ערכים|תודעה|אחריות)/,
+      // Rhetorical belittling questions — "זו הרמה הכי גבוהה שהגעת?"
+      /(?:זו|זה|זאת)\s+ה(?:רמה|יכולת|הישג|תרומה|תגובה|טענה|תשובה)\s+הכי\s+(?:גבוהה?|טובה?|חכמה?|עמוקה?)\s+ש(?:הצלחת|יכולת|אתה\s+מסוגל|את\s+מסוגלת)/,
+      /(?:עד\s+כאן|רק\s+עד\s+פה)\s+(?:הגעת|הגעתם|יכולת|אתה\s+מגיע)/,
+      /זה\s+(?:הכי\s+טוב|הכי\s+חכם|כל\s+מה)\s+ש(?:יש\s+לך|אתה\s+יכול|יכולת)\s+(?:להגיד|להציע|לתרום)/,
+      /(?:אתה|את) (?:אדם|בן אדם|יצור) (?:נורא|נוראי|נוראית|איום|איומה|מגעיל|מגעילה|מחריד|מחרידה|מביש|מבישה)/,
+      /איזה (?:בן אדם|יצור|דמות|אדם) (?:עצוב|עצובה|עלוב|עלובה|מביש|מבישה|נורא|נוראי|מגעיל|מגעילה)/,
+      /(?:אתה|את) (?:הכי|הדבר הכי) (?:נורא|גרוע|גרועה|מגעיל|מגעילה|עלוב|עלובה|מביש|מבישה)/,
+      /לא יאומן כמה (?:אתה|את)/,
+      /(?:אתה|את) (?:ממש )?(?:מביש|מבישה|מגעיל|מגעילה|מחריד|מחרידה|מביך|מביכה)/,
+      /מביך\s+ש.*(?:אתה|את)/,
+      /(?:אתה|את).*מביך\s+ש/,
+      /(?:אתה|את) (?:הכי גדול ב|אלוף ב)?שקרים/,
+      /(?:אתה|את) (?:מייצג|מייצגת|מגלם|מגלמת) את כל מה ש(?:רע|לא בסדר|שגוי|מושחת|נורא|גרוע|כושל|מקולקל)/,
+      /קודם (?:תהיה|תהיי|תהפוך ל) בן\s*אדם/,
+      /(?:אתה|את) (?:פשוט\s+)?(?:בדיחה|פארסה|קריקטורה|מיים|ג'וק|ג׳וק|סאטירה)(?:\s+(?:מהלכת?|חיה|של\s+\w+))?/,
+      /(?:אתה|את) (?:בושה|חרפה|גנאי|ביזיון|קלון) (?:ל|של)/,
+      /(?:אתה|את) (?:ה)?(?:בושה|חרפה|ביזיון|קלון) (?:של|ל|למדינה|למשפחה|לחברה|לדור)/,
+      /איזה\s+(?:נזק|אסון|כישלון|ביזיון|פיאסקו|חרפה|בושה|אפס|חדל\s+אישים|עלוב)\s+(?:אתה|את|זה|הוא|היא)/,
+      /(?:ביב|נתניהו|גנץ|\w+) (?:הוא|היא) (?:אדם|יצור|בן אדם|ה)?(?:נורא|נוראי|נוראית|מגעיל|מגעילה|מחריד|מחרידה|מביש|מבישה|עלוב|עלובה|שרלטן|רמאי|שקרן)/
+    ];
+    hebrewJudgingPatterns.forEach(p => {
+      if (p.test(trimmedText)) {
+        hebrewScore += 2;
+        hebrewReasons.push('Hebrew judging/condemning');
+        hebrewECPM.push('emotional');
+      }
+    });
+
+    // Category 9: Dehumanization via animal comparison (+2.5)
+    // Pattern: animal verb directed at others, or group + animal label/adjective
+    // NOT triggered by self-directed ("אני חי כמו כלב")
+    const animalVerbs = ['נובח','נובחים','נובחות','נובחת','תנבח','תנבחו','גועה','גועים','נוהם','נוהמים','נושך','נושכים','מנשך','רומס','רומסים'];
+    const animalVerbRx = new RegExp('(?:אתה|את|אתם|אתן|הם|הן|(?:ה(?:שמאלנים|ימנים|חרדים|ערבים|ציונים|מתנחלים|חילונים|ביביסטים|\\w+ים)))\\s+(?:' + animalVerbs.join('|') + ')', 'i');
+    if (animalVerbRx.test(trimmedText)) {
+      hebrewScore += 2.5;
+      hebrewReasons.push('Hebrew dehumanization — animal verb directed at others');
+      hebrewECPM.push('emotional');
+    }
+
+    // "[group] + animal adjective" — e.g. "הקפלניסטים החזירים", "השמאלנים הכלבים"
+    const animalAdjectives = ['החזירים','החזירות','הכלבים','הכלבות','החמורים','החמורות','הבהמות','הנחשים','החולדות','העכברים','הטפילים'];
+    const animalAdjectiveRx = new RegExp('(?:ה\\w+)\\s+(?:' + animalAdjectives.join('|') + ')|(?:' + animalAdjectives.join('|') + ')\\s+(?:ה\\w+|האלה|הללו)');
+    if (animalAdjectiveRx.test(trimmedText)) {
+      hebrewScore += 2.5;
+      hebrewReasons.push('Hebrew dehumanization — group + animal label');
+      hebrewECPM.push('emotional');
+    }
+
+    // "מתנהגים/מתנהגות כמו [animal]" — directed at others (not "אני")
+    const animalNouns = ['חזירים','חזירות','כלבים','כלבות','חמורים','חמורות','בהמות','עדר','כבשים','זאבים','נחשים','עכברים','חולדות','טפילים','עורבים'];
+    const behaveLikeAnimalRx = new RegExp('(?:אתם|אתן|הם|הן|(?:ה\\w+(?:ים|ות)))\\s+(?:מתנהג(?:ים|ות)|חי(?:ים|ות)|נראה|נראים)\\s+כמו\\s+(?:' + animalNouns.join('|') + '|עדר)', 'i');
+    if (behaveLikeAnimalRx.test(trimmedText)) {
+      hebrewScore += 2.5;
+      hebrewReasons.push('Hebrew dehumanization — behaves like animal');
+      hebrewECPM.push('emotional');
+    }
+
+    // Category 10: "We vs. Them" polarization — per ECPM model (cognitive dimension) (+2.5)
+    // Pattern: explicit ingroup (אנחנו) vs outgroup (אתם/הם/[group]) construction
+    const weVsThemPatterns = [
+      // "אנחנו X ואתם Y" — explicit polarization
+      /אנחנו\b.{1,40}\bואתם\b/,
+      /אנחנו\b.{1,40}\bואתן\b/,
+      /אנחנו\b.{1,40}\bוהם\b/,
+      /אנחנו\b.{1,40}\bאבל\s+(?:אתם|הם|הן)\b/,
+      // "אתם ה[group]" — direct address of outgroup
+      /אתם\s+ה(?:שמאלנים|ימנים|חרדים|חילונים|ערבים|ביביסטים|אשכנזים|מזרחים|דתיים|מתנחלים)/,
+      // "אנחנו ה[group]... אתם" — ingroup positive / outgroup negative
+      /אנחנו\s+ה\w+.{1,60}(?:אתם|הם|הן)/,
+      // "הצד שלנו" vs "הצד שלכם/שלהם"
+      /הצד\s+שלנו\b.{1,40}הצד\s+של(?:כם|הם)/,
+      // "אנשים כמונו" vs "אנשים כמוכם/כמוהם"
+      /כמונו\b.{1,30}כמו(?:כם|הם)\b/,
+      // "אתה/את וכל ה[group]" — lumping person into outgroup
+      /(?:אתה|את|אתם|אתן)\s+וכל\s+ה(?:שמאלנים|ימנים|חרדים|חילונים|ערבים|ביביסטים|אשכנזים|מזרחים|דתיים|מתנחלים|ליברלים|לאומנים|פשיסטים|קומוניסטים|ציונים|פלסטינאים|בוגדים|בוטים|שקרנים|מסיתים)/,
+      // "אתה בדיוק כמו כל ה[group]" — equivalence with group
+      /(?:אתה|את)\s+(?:בדיוק\s+)?כמו\s+כל\s+ה(?:שמאלנים|ימנים|חרדים|חילונים|ערבים|ביביסטים|אשכנזים|מזרחים|דתיים|מתנחלים|ליברלים|לאומנים)/,
+    ];
+    weVsThemPatterns.forEach(p => {
+      if (p.test(trimmedText)) {
+        hebrewScore += 2.5;
+        hebrewReasons.push('Hebrew We-vs-Them polarization (ECPM cognitive)');
+        hebrewECPM.push('cognitive');
+      }
+    });
+
+    // Combination bonus
+    const hHasAttack = hebrewReasons.some(r => r.includes('insult') || r.includes('blame') || r.includes('accusat') || r.includes('slur') || r.includes('judging') || r.includes('dehumanization'));
+    const hHasCategorical = hebrewReasons.some(r => r.includes('categorical') || r.includes('absolute') || r.includes('group') || r.includes('polarization'));
+    if (hHasAttack && hHasCategorical) { hebrewScore += 1; hebrewReasons.push('Combined attack+categorical'); hebrewECPM.push('emotional'); }
+
+    // ── ECPM classification ───────────────────────────────────────────────────
+    const hHasCognitive = hebrewECPM.includes('cognitive');
+    const hHasEmotional = hebrewECPM.includes('emotional');
+    let hebrewEscalationType = 'other';
+    if (hHasCognitive && hHasEmotional) hebrewEscalationType = 'both';
+    else if (hHasCognitive) hebrewEscalationType = 'cognitive';
+    else if (hHasEmotional) hebrewEscalationType = 'emotional';
+
+    // ── Decision ─────────────────────────────────────────────────────────────
+    if (hebrewScore === 0) {
+      console.log('✓ Hebrew — no escalatory signals', { text: trimmedText.substring(0, 50) });
+      return { isEscalatory: false, escalationType: 'none', reasons: ['Hebrew — no escalatory signals'] };
+    }
+    console.log(`🚨 Hebrew escalation signals (score: ${hebrewScore.toFixed(1)}, ECPM: ${hebrewEscalationType}) → API`, { reasons: hebrewReasons });
+    return { isEscalatory: true, escalationType: hebrewEscalationType, reasons: hebrewReasons, hebrewScore, requiresAPI: true };
   }
 
   let escalationScore = 0;
@@ -2648,10 +3060,29 @@ async function createEscalationTooltip(originalText, element, escalationType = '
       allowManualRephrase = true; // Allow user to dismiss and edit manually
       console.log("❌ Rephrasing failed due to error - escalation was detected but API call failed");
     } else if (rephrasedText === null) {
-      // API confirmed: NOT escalatory — remove tooltip silently (same behaviour as local non-escalatory detection).
+      // API confirmed: NOT escalatory — remove tooltip silently.
       console.log("✅ API returned null — text is not escalatory, removing tooltip");
       tooltip.remove();
       justRephrased = false;
+      // Still log this interaction: local detection fired but API confirmed not escalatory.
+      // Important research data — tracks false positives from local detector.
+      if (!lastLoggedInteraction?.interactionId) {
+        const interactionId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+          ? crypto.randomUUID()
+          : (`${Date.now()}-${Math.random().toString(36).slice(2)}`);
+        lastLoggedInteraction = { interactionId, didUserAccept: 'not_applicable', botType: botType || 'angel' };
+        logInteraction({
+          usersOriginalContent: originalText,
+          rephraseSuggestion: '',
+          didUserAccept: 'not_applicable',
+          actualPostedText: '',
+          timeToRephraseSeconds: timeToRephraseSeconds || '',
+          escalationType,
+          isEscalating: false,
+          botType: botType || 'angel',
+          interactionId
+        });
+      }
       return;
     } else {
       // Empty string or other unexpected value - treat as error
@@ -3217,3 +3648,81 @@ if (document.readyState === "loading") {
 } else {
   initializeObserver();
 }
+
+// ── Survey Banner ──────────────────────────────────────────────────────────
+
+function showSurveyBanner(studyId) {
+  if (document.getElementById('discourse-lab-survey-banner')) return;
+
+  const formUrl = studyId
+    ? `https://docs.google.com/forms/d/e/1FAIpQLSdH7hDhb2KKKCiaSH4wVONl0XMzFtoZtmz3NTYFSUTtFjrRzA/viewform?usp=pp_url&entry.465072047=${encodeURIComponent(studyId)}`
+    : 'https://docs.google.com/forms/d/e/1FAIpQLSdH7hDhb2KKKCiaSH4wVONl0XMzFtoZtmz3NTYFSUTtFjrRzA/viewform';
+
+  const banner = document.createElement('div');
+  banner.id = 'discourse-lab-survey-banner';
+  banner.style.cssText = `
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #ffffff;
+    border: 1px solid #e4e4e7;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+    padding: 20px 24px;
+    z-index: 999999;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    max-width: 420px;
+    width: calc(100% - 48px);
+    direction: rtl;
+  `;
+
+  banner.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+      <div>
+        <p style="margin:0 0 4px;font-size:15px;font-weight:600;color:#09090b;">
+          🎉 סיימת את הניסוי!
+        </p>
+        <p style="margin:0 0 14px;font-size:13px;color:#71717a;line-height:1.5;">
+          הגיע הזמן למלא את שאלון הסיום. Study ID שלך: <strong style="color:#9333ea;">${studyId || '—'}</strong>
+        </p>
+        <a href="${formUrl}" target="_blank" style="
+          display:inline-block;
+          background:#9333ea;
+          color:#fff;
+          padding:8px 18px;
+          border-radius:6px;
+          text-decoration:none;
+          font-size:13px;
+          font-weight:500;
+        ">📋 למילוי השאלון</a>
+      </div>
+      <button id="discourse-lab-banner-close" style="
+        background:none;border:none;cursor:pointer;
+        color:#71717a;font-size:18px;padding:0;line-height:1;
+        flex-shrink:0;
+      ">✕</button>
+    </div>
+  `;
+
+  document.body.appendChild(banner);
+
+  document.getElementById('discourse-lab-banner-close').addEventListener('click', () => {
+    banner.remove();
+    // Show again after 30 minutes if not clicked
+    setTimeout(() => {
+      chrome.storage.local.get('surveyCompleted', ({ surveyCompleted }) => {
+        if (!surveyCompleted) showSurveyBanner(studyId);
+      });
+    }, 30 * 60 * 1000);
+  });
+}
+
+// Listen for trigger from background
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.type === 'SHOW_SURVEY_BANNER') {
+    chrome.storage.local.get(['studyId', 'surveyCompleted'], ({ studyId, surveyCompleted }) => {
+      if (!surveyCompleted) showSurveyBanner(studyId);
+    });
+  }
+});

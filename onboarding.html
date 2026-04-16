@@ -233,6 +233,22 @@
 
     <form id="onboardingForm">
       <div class="form-group">
+        <label for="nickname">בחרו Nickname אנונימי לחקר זה</label>
+        <p style="font-size: 13px; color: #71717a; margin-bottom: 10px;">
+          <strong>בחרו שם בדוי ייחודי</strong> שלא קשור לשמכם האמיתי או לפרטים אישיים שלכם.
+          לדוגמה: <em>curious_penguin, daring_wolf, sunset_reader</em>
+        </p>
+        <input
+          type="text"
+          id="nickname"
+          name="nickname"
+          placeholder="בחרו שם בדוי (אותיות וקו תחתון בלבד)"
+          required
+        >
+        <div class="error-message" id="nicknameError">נא להכניס nickname תקין (3+ אותיות/קו תחתון, ללא רווחים)</div>
+      </div>
+
+      <div class="form-group">
         <label for="gender">מגדר</label>
         <select id="gender" name="gender" required>
           <option value="">בחרו מגדר</option>
