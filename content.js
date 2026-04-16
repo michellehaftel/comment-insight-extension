@@ -2708,6 +2708,35 @@ function showSuccessTooltip(element) {
   }, 2500);
 }
 
+// Format Hebrew text based on user's gender from onboarding
+// Handles patterns like "מרגיש/ה" → "מרגיש" (male) or "מרגישה" (female)
+function formatHebrewByGender(hebrewText, gender) {
+  // Return as-is if not Hebrew or no gender provided
+  if (!hebrewText || !containsHebrew(hebrewText) || !gender) {
+    return hebrewText;
+  }
+
+  let formattedText = hebrewText;
+
+  // Common Hebrew gender patterns to handle
+  if (gender === 'male') {
+    // Remove feminine suffix after slash: "word/ה" → "word"
+    formattedText = formattedText.replace(/(\S+)\/ה\b/g, '$1');
+    // Also handle patterns like "מרגיש/ה" where we want to keep the first part (masculine)
+    formattedText = formattedText.replace(/(\S+)\/(\S+)\b/g, '$1');
+  } else if (gender === 'female') {
+    // Keep feminine form: replace "word/ה" with "wordה" (feminine)
+    formattedText = formattedText.replace(/(\S+)\/ה\b/g, '$1ה');
+    // For other patterns, keep the second part if it's feminine
+    formattedText = formattedText.replace(/(\S+)\/(\S+)\b/g, (match, p1, p2) => {
+      // If second part ends with ה, use it (feminine); otherwise use first part
+      return p2.endsWith('ה') ? p2 : p1;
+    });
+  }
+
+  return formattedText;
+}
+
 async function createEscalationTooltip(originalText, element, escalationType = 'unknown', botType = 'angel', preloadedRephrase = undefined) {
   // Remove if already shown
   const existing = document.querySelector(".escalation-tooltip");
@@ -2716,7 +2745,11 @@ async function createEscalationTooltip(originalText, element, escalationType = '
   // DISABLED: Hebrew support is currently deactivated
   // Detect if text is in Hebrew for UI localization
   const isHebrew = false; // DISABLED: containsHebrew(originalText);
-  
+
+  // Get user's gender from onboarding for Hebrew formatting
+  const { userGender } = await chrome.storage.local.get('userGender');
+  const userGenderValue = userGender || 'unknown'; // Default if not set
+
   // Different UI text based on bot type
   const uiText = botType === 'devil' ? {
     warning: "Let me offer you a rephrase",
@@ -3033,8 +3066,10 @@ async function createEscalationTooltip(originalText, element, escalationType = '
       // Ensure RTL class is applied
       suggestionText.classList.add('rtl-text');
     }
-    
-    suggestionText.textContent = `"${finalText}"`;
+
+    // Apply gender-based formatting to Hebrew text
+    const formattedFinalText = formatHebrewByGender(finalText, userGenderValue);
+    suggestionText.textContent = `"${formattedFinalText}"`;
     if (rephraseBtn) {
       rephraseBtn.disabled = false;
       rephraseBtn.classList.remove('loading');
@@ -3297,14 +3332,17 @@ async function createEscalationTooltip(originalText, element, escalationType = '
     // Remove original tooltip immediately
     tooltip.remove();
     
+    // Apply gender-based formatting to Hebrew text before replacing
+    const textToReplace = formatHebrewByGender(rephrasedText, userGenderValue);
+
     console.log("🔄 About to replace text in element:", {
       elementTag: elementToRephrase.tagName,
       elementContentEditable: elementToRephrase.contentEditable,
       currentText: getTextContent(elementToRephrase).substring(0, 50),
-      newText: rephrasedText.substring(0, 50)
+      newText: textToReplace.substring(0, 50)
     });
-    
-    const success = replaceTextInElement(elementToRephrase, rephrasedText);
+
+    const success = replaceTextInElement(elementToRephrase, textToReplace);
     
     console.log("🔄 replaceTextInElement returned:", success);
     
